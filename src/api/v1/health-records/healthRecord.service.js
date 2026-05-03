@@ -62,8 +62,37 @@ const makeRecordId = () =>
 
 const isInStock = (status = '') => status.trim().toUpperCase() === 'IN STOCK';
 
-const validatePrescriptionMedicines = async (details = {}) => {
+const normalizePrescriptionRequest = (details = {}) => {
   const requestedMedicines = Array.isArray(details.medicines) ? details.medicines : [];
+  if (requestedMedicines.length > 0) {
+    return requestedMedicines;
+  }
+
+  const medicationName = String(details.prescriptionMedicationName || details.medicationName || '').trim();
+  const prescribedDosage = String(details.prescriptionDosage || details.dosage || '').trim();
+  const prescribedQuantity = Number.isNaN(Number(details.prescriptionQuantity || details.quantity || 0))
+    ? 1
+    : Number(details.prescriptionQuantity || details.quantity || 1);
+
+  if (!medicationName || !prescribedDosage) {
+    return [];
+  }
+
+  return [
+    {
+      medicineId: String(details.medicineId || '').trim(),
+      medicineName: medicationName,
+      prescribedDosage,
+      prescribedQuantity: Math.max(1, prescribedQuantity),
+      unitPrice: Number(details.unitPrice || 0),
+      expiry: String(details.expiry || '').trim(),
+      status: String(details.status || '').trim(),
+    },
+  ];
+};
+
+const validatePrescriptionMedicines = async (details = {}) => {
+  const requestedMedicines = normalizePrescriptionRequest(details);
   if (requestedMedicines.length === 0) {
     throw new AppError('Add at least one medicine to the prescription.', 422);
   }
@@ -72,59 +101,61 @@ const validatePrescriptionMedicines = async (details = {}) => {
 
   const medicines = requestedMedicines.map((item) => {
     const medicineId = typeof item.medicineId === 'string' ? item.medicineId.trim() : '';
-    if (!medicineId) {
+    const medicineName = typeof item.medicineName === 'string' ? item.medicineName.trim() : '';
+    const prescribedQuantity = Number(item.prescribedQuantity || 0);
+
+    if (!medicineId && !medicineName) {
       throw new AppError('Medicine selection is required.', 422);
     }
 
-    const inventoryItem = inventory.find((candidate) => candidate.id === medicineId);
-    if (!inventoryItem) {
-      throw new AppError('Selected medicine is not found in inventory.', 422);
+    const inventoryItem = inventory.find((candidate) => candidate.id === medicineId || candidate.name.toLowerCase() === medicineName.toLowerCase());
+    if (inventoryItem) {
+      if (!isInStock(inventoryItem.status) || inventoryItem.quantity <= 0) {
+        throw new AppError(`${inventoryItem.name} is not currently available.`, 422);
+      }
     }
 
-    if (!isInStock(inventoryItem.status) || inventoryItem.quantity <= 0) {
-      throw new AppError(`${inventoryItem.name} is not currently available.`, 422);
-    }
-
-    const prescribedQuantity = Number(item.prescribedQuantity || 0);
-    if (prescribedQuantity < 1) {
+    if (!isNaN(prescribedQuantity) && prescribedQuantity < 1) {
       throw new AppError('Quantity must be at least 1.', 422);
     }
 
-    if (prescribedQuantity > inventoryItem.quantity) {
+    if (inventoryItem && prescribedQuantity > inventoryItem.quantity) {
       throw new AppError(
         `Quantity for ${inventoryItem.name} cannot exceed available stock (${inventoryItem.quantity}).`,
         422
       );
     }
 
-    const unitPrice = Number(inventoryItem.price || 0);
+    const unitPrice = inventoryItem ? Number(inventoryItem.price || 0) : Number(item.unitPrice || 0);
+    const quantity = Number.isNaN(prescribedQuantity) ? 1 : prescribedQuantity;
 
     return {
-      medicineId: inventoryItem.id,
-      medicineName: inventoryItem.name,
-      prescribedDosage: String(item.prescribedDosage || inventoryItem.dosage).trim(),
-      availableQuantity: inventoryItem.quantity,
-      prescribedQuantity,
+      medicineId: inventoryItem ? inventoryItem.id : medicineId || medicineName.replace(/\s+/g, '-').toUpperCase(),
+      medicineName: inventoryItem ? inventoryItem.name : medicineName,
+      prescribedDosage: String(item.prescribedDosage || item.dosage || '').trim(),
+      availableQuantity: inventoryItem ? inventoryItem.quantity : quantity,
+      prescribedQuantity: quantity,
       unitPrice,
-      totalPrice: Number((unitPrice * prescribedQuantity).toFixed(2)),
-      expiry: inventoryItem.expiry || '',
-      status: inventoryItem.status || '',
+      totalPrice: Number((unitPrice * quantity).toFixed(2)),
+      expiry: inventoryItem ? inventoryItem.expiry || '' : String(item.expiry || '').trim(),
+      status: inventoryItem ? inventoryItem.status || '' : String(item.status || 'Unknown').trim(),
     };
   });
 
   const totalQuantity = medicines.reduce((total, item) => total + item.prescribedQuantity, 0);
   const title = medicines.map((item) => item.medicineName).join(', ');
+  const directionsForUse = String(details.directionsForUse || details.prescriptionDirections || '').trim();
 
   return {
     title,
-    summary: details.directionsForUse || '',
+    summary: directionsForUse,
     medicines,
     medicationName: medicines[0]?.medicineName || '',
     dosage: medicines[0]?.prescribedDosage || '',
-    directionsForUse: details.directionsForUse || '',
+    directionsForUse,
     quantity: totalQuantity,
-    startDate: details.startDate || '',
-    endDate: details.endDate || '',
+    startDate: String(details.startDate || details.prescriptionStartDate || '').trim(),
+    endDate: String(details.endDate || details.prescriptionEndDate || '').trim(),
   };
 };
 

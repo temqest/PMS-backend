@@ -3,6 +3,10 @@ require('./src/config/env');
 const connectDB = require('./src/config/db');
 const app = require('./src/app');
 
+if (process.env.NODE_ENV !== 'test') {
+  require('./src/jobs/predictiveCare.job');
+}
+
 const PORT = process.env.PORT || 5000;
 
 connectDB()
