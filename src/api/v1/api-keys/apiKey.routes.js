@@ -3,7 +3,7 @@ const router = express.Router();
 const ctrl = require('./apiKey.controller');
 const { protect } = require('../../../middleware/auth.middleware');
 const { validate } = require('../../../middleware/validate.middleware');
-const { createApiKeySchema } = require('./apiKey.validation');
+const { createApiKeySchema, updateApiKeySchema } = require('./apiKey.validation');
 
 // All API key management routes require authentication
 router.use(protect);
@@ -14,8 +14,10 @@ router.route('/')
 
 router.route('/:id')
   .get(ctrl.getApiKeyById)
+  .patch(validate(updateApiKeySchema), ctrl.updateApiKey)
   .delete(ctrl.deleteApiKey);
 
 router.patch('/:id/revoke', ctrl.revokeApiKey);
+router.patch('/:id/rotate', ctrl.rotateApiKey);
 
 module.exports = router;

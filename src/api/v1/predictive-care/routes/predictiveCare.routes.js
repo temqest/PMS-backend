@@ -10,6 +10,8 @@ const {
   patientIdParamSchema,
   riskProfileListQuerySchema,
   alertsListQuerySchema,
+  retrainBodySchema,
+  labForecastQuerySchema,
   mongoIdParamSchema,
   resolveAlertBodySchema,
 } = require('../predictiveCare.validation');
@@ -50,6 +52,13 @@ router.post(
   riskProfile.computeForPatient
 );
 
+router.post(
+  '/ml/retrain',
+  allow(...writeAccess),
+  validate(retrainBodySchema),
+  riskProfile.retrainModels
+);
+
 // ----- Alerts -----
 router.get(
   '/alerts',
@@ -81,6 +90,14 @@ router.get(
   allow(...readAccess),
   validatePart(patientIdParamSchema, 'params'),
   analytics.labTrendChart
+);
+
+router.get(
+  '/analytics/:patientId/lab-forecast',
+  allow(...readAccess),
+  validatePart(patientIdParamSchema, 'params'),
+  validatePart(labForecastQuerySchema, 'query'),
+  riskProfile.labForecast
 );
 
 router.get(

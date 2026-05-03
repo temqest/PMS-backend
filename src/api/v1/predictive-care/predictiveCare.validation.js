@@ -20,6 +20,20 @@ exports.riskProfileListQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).optional(),
 });
 
+exports.retrainBodySchema = Joi.object({
+  models: Joi.array()
+    .items(Joi.string().valid('all', 'readmission', 'chronic_risk', 'lab_forecast', 'anomaly'))
+    .min(1)
+    .optional(),
+}).unknown(false);
+
+exports.labForecastQuerySchema = Joi.object({
+  test_name: Joi.string().trim().required(),
+  last_values: Joi.string()
+    .pattern(/^\s*-?\d+(?:\.\d+)?(\s*,\s*-?\d+(?:\.\d+)?)*\s*$/)
+    .optional(),
+});
+
 exports.alertsListQuerySchema = Joi.object({
   patient_id: Joi.string().trim().optional(),
   alert_type: Joi.string()

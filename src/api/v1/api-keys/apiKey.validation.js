@@ -27,4 +27,23 @@ const createApiKeySchema = Joi.object({
     }),
 });
 
-module.exports = { createApiKeySchema };
+const updateApiKeySchema = Joi.object({
+  name: Joi.string()
+    .optional()
+    .trim()
+    .min(3)
+    .max(100),
+  description: Joi.string()
+    .optional()
+    .trim()
+    .max(500)
+    .allow(''),
+  // Allow adding new permissions without code changes.
+  // If you want to restrict this to a fixed allowlist, we can tighten it later.
+  permissions: Joi.array()
+    .optional()
+    .items(Joi.string().trim().min(1).max(100))
+    .min(1),
+}).min(1);
+
+module.exports = { createApiKeySchema, updateApiKeySchema };

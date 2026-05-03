@@ -21,6 +21,21 @@ const patientRiskProfileSchema = new mongoose.Schema(
     has_overdue_vaccinations: { type: Boolean, default: false },
     has_adherence_gaps: { type: Boolean, default: false },
 
+    ml_readmission_prob: { type: Number },
+    ml_readmission_level: { type: String },
+    ml_chronic_level: { type: String },
+    ml_chronic_confidence: { type: Number },
+    ml_top_risk_factors: [
+      {
+        feature: { type: String },
+        importance: { type: Number },
+      },
+    ],
+    ml_is_anomaly: { type: Boolean },
+    ml_anomaly_score: { type: Number },
+    ml_computed_at: { type: Date },
+    ml_service_used: { type: Boolean, default: false },
+
     last_computed_at: { type: Date, default: Date.now },
     record_count_at_last_compute: { type: Number, default: 0 },
   },

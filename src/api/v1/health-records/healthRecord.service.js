@@ -11,6 +11,7 @@ const fetchPrescriptionInventory = async () => {
   if (!url) {
     throw new AppError('Prescription inventory URL is not configured.', 500);
   }
+  const apiKey = process.env.PRESCRIPTION_API_KEY;
 
   const now = Date.now();
   if (now - prescriptionInventoryCache.timestamp < INVENTORY_CACHE_TTL) {
@@ -22,7 +23,11 @@ const fetchPrescriptionInventory = async () => {
     throw new AppError('Server fetch API is unavailable. Please run on Node 18+ or install a fetch polyfill.', 500);
   }
 
-  const response = await httpFetch(url, { headers: { Accept: 'application/json' } });
+  const headers = { Accept: 'application/json' };
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
+  }
+  const response = await httpFetch(url, { headers });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
     throw new AppError(`Failed to load prescription inventory: ${response.status} ${body}`, 502);

@@ -8,6 +8,11 @@ const {
   computePredictiveCareForPatient,
   computePredictiveCareForAllActivePatients,
 } = require('../services/predictiveCareOrchestrator.service');
+const {
+  mergeMLIntoRiskProfile,
+  triggerRetraining,
+  getLabForecast,
+} = require('../services/mlPrediction.service');
 
 exports.getPatientRiskProfile = asyncHandler(async (req, res) => {
   const profile = await PatientRiskProfile.findOne({ patient_id: req.params.patientId });
@@ -42,7 +47,8 @@ exports.computeForPatient = asyncHandler(async (req, res) => {
   }
 
   await computePredictiveCareForPatient(patient);
-  const profile = await PatientRiskProfile.findOne({ patient_id: patient.patient_id });
+  const ruleBasedProfile = await PatientRiskProfile.findOne({ patient_id: patient.patient_id });
+  const profile = await mergeMLIntoRiskProfile(patient.patient_id, ruleBasedProfile);
   apiResponse.success(res, 200, { message: 'Risk profile computed successfully.', profile });
 });
 
@@ -54,4 +60,21 @@ exports.computeForAll = asyncHandler(async (req, res) => {
   void computePredictiveCareForAllActivePatients().catch((err) => {
     logger.error({ event: 'PREDICTIVE_CARE_BATCH_FAILED', error: err.message, stack: err.stack });
   });
+});
+
+exports.retrainModels = asyncHandler(async (req, res) => {
+  const result = await triggerRetraining(req.body.models || ['all']);
+  apiResponse.success(res, 200, result || { message: 'Retrain triggered (or ML service unavailable)' });
+});
+
+exports.labForecast = asyncHandler(async (req, res) => {
+  const { test_name: testName, last_values: lastValues } = req.query;
+  const parsed = lastValues ? String(lastValues).split(',').map(Number) : [];
+
+  const result = await getLabForecast(req.params.patientId, testName, parsed);
+  if (!result) {
+    throw new AppError('ML service unavailable', 503);
+  }
+
+  apiResponse.success(res, 200, result);
 });
