@@ -1,0 +1,5 @@
+node_modules/
+.env
+src/logs/
+pms-frontend/
+API_KEY_USAGE_GUIDE.md

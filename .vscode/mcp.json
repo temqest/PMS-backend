@@ -1,0 +1,38 @@
+{
+  "servers": {
+    "heroui-react": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@heroui/react-mcp@latest"]
+    },
+
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ]
+    },
+    
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    }
+
+    // "git": {
+    //   "type": "stdio",
+    //   "command": "npx",
+    //   "args": ["-y", "@modelcontextprotocol/server-git"]
+    // },
+
+    // "fetch": {
+    //   "type": "stdio",
+    //   "command": "npx",
+    //   "args": ["-y", "@modelcontextprotocol/server-fetch"]
+    // },
+  }
+}

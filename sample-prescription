@@ -1,0 +1,56 @@
+[
+  {
+    "id": "MED0003",
+    "name": "Amoxicillin",
+    "dosage": "250mg",
+    "quantity": 100,
+    "price": 18,
+    "expiry": "2026-05-20",
+    "status": "IN STOCK"
+  },
+  {
+    "id": "MED0002",
+    "name": "Cetirizine",
+    "dosage": "10mg",
+    "quantity": 15,
+    "price": 12.5,
+    "expiry": "2026-07-15",
+    "status": "LOW"
+  },
+  {
+    "id": "MED0004",
+    "name": "Ibuprofen",
+    "dosage": "200mg",
+    "quantity": 80,
+    "price": 8,
+    "expiry": "2025-12-31",
+    "status": "EXPIRING SOON"
+  },
+  {
+    "id": "MED0005",
+    "name": "Metformin",
+    "dosage": "500mg",
+    "quantity": 210,
+    "price": 7.5,
+    "expiry": "2027-09-10",
+    "status": "IN STOCK"
+  },
+  {
+    "id": "MED0001",
+    "name": "Paracetamol",
+    "dosage": "500mg",
+    "quantity": 120,
+    "price": 5,
+    "expiry": "2027-03-01",
+    "status": "SUFFICIENT"
+  },
+  {
+    "id": "MED-352928",
+    "name": "Senku",
+    "dosage": "600",
+    "quantity": 10,
+    "price": 6,
+    "expiry": "2026-07-22",
+    "status": "In Stock"
+  }
+]
