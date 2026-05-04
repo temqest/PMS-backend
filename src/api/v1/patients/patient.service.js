@@ -56,12 +56,31 @@ exports.getPatients = async (query = {}, actor = {}) => {
   }
   if (query.status) filter.status = query.status;
   if (query.search) {
-    const q = query.search;
-    filter.$or = [
-      { first_name: new RegExp(q, 'i') },
-      { last_name: new RegExp(q, 'i') },
-      { contact_number: new RegExp(q, 'i') },
-    ];
+    const q = query.search.trim();
+    const parts = q.split(/\s+/).filter(p => p.length > 0);
+    
+    // If search contains multiple parts (e.g., "Olivia Gonzalez"), match full name
+    if (parts.length > 1) {
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ');
+      filter.$or = [
+        // Match full name (first + last)
+        { first_name: new RegExp(firstName, 'i'), last_name: new RegExp(lastName, 'i') },
+        // Also try reverse (in case user entered last name first)
+        { first_name: new RegExp(lastName, 'i'), last_name: new RegExp(firstName, 'i') },
+        // Keep original logic for partial matches
+        { first_name: new RegExp(q, 'i') },
+        { last_name: new RegExp(q, 'i') },
+        { contact_number: new RegExp(q, 'i') },
+      ];
+    } else {
+      // Single word search - use original logic
+      filter.$or = [
+        { first_name: new RegExp(q, 'i') },
+        { last_name: new RegExp(q, 'i') },
+        { contact_number: new RegExp(q, 'i') },
+      ];
+    }
   }
 
   const [total, patients] = await Promise.all([
