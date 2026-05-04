@@ -1,0 +1,14 @@
+{
+  "name": "school-map-mcp-tools",
+  "version": "1.0.0",
+  "description": "Custom MCP tools for School Map",
+  "main": "search-playwright.js",
+  "type": "commonjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "playwright": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

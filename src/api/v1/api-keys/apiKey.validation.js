@@ -20,10 +20,10 @@ const createApiKeySchema = Joi.object({
     }),
   permissions: Joi.array()
     .optional()
-    .items(Joi.string().valid('read:invoices', 'read:patients', 'write:invoices'))
+    .items(Joi.string().valid('read:invoices', 'read:patients', 'read:health-records', 'write:invoices'))
     .default(['read:invoices'])
     .messages({
-      'array.includes': 'Invalid permission. Allowed: read:invoices, read:patients, write:invoices',
+      'array.includes': 'Invalid permission. Allowed: read:invoices, read:patients, read:health-records, write:invoices',
     }),
 });
 

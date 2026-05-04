@@ -1,5 +1,6 @@
 {
   "servers": {
+
     "heroui-react": {
       "type": "stdio",
       "command": "npx",
@@ -8,31 +9,58 @@
 
     "filesystem": {
       "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "."
-      ]
+      "command": "node",
+      "args": ["./mcp-tools/safe-filesystem.js"]
     },
-    
+
     "playwright": {
+      "type": "stdio",
       "command": "npx",
-      "args": [
-        "@playwright/mcp@latest"
-      ]
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "your-github-pat"
+      }
+    },
+
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    },
+
+    // "supabase": {
+    //   "type": "stdio",
+    //   "command": "npx",
+    //   "args": ["-y", "@supabase/mcp-server-supabase@latest"],
+    //   "env": {
+    //     "SUPABASE_URL": "your-project-url",
+    //     "SUPABASE_SERVICE_ROLE_KEY": "your-service-role-key"
+    //   }
+    // },
+
+    "web-search": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./mcp-tools/search-playwright.js"]
     }
 
-    // "git": {
-    //   "type": "stdio",
-    //   "command": "npx",
-    //   "args": ["-y", "@modelcontextprotocol/server-git"]
-    // },
-
-    // "fetch": {
-    //   "type": "stdio",
-    //   "command": "npx",
-    //   "args": ["-y", "@modelcontextprotocol/server-fetch"]
-    // },
   }
 }
