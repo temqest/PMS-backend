@@ -30,6 +30,13 @@ const patientSchema = new mongoose.Schema(
     medical_history_ref:  { type: String },
     appointment_refs:     [{ type: String }],
     billing_refs:         [{ type: String }],
+    // Insurance information: provider and coverage percentage (0-100)
+    insurance: {
+      provider: { type: String, trim: true, default: '' },
+      coverage_percentage: { type: Number, min: 0, max: 100, default: 0 },
+      policy_number: { type: String, trim: true, default: '' },
+      group_number: { type: String, trim: true, default: '' },
+    },
 
     created_by:  { type: String, required: true },
     updated_by:  { type: String },

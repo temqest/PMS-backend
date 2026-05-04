@@ -60,6 +60,9 @@ exports.createPrescriptionInvoice = async (data, actor) => {
     health_record_id: data.health_record_id || '',
     items,
     prescription_names: items.map((item) => String(item.medicineName || '').trim()).filter(Boolean),
+    // include optional variable and release flag
+    variable: data.variable ?? null,
+    is_released: Boolean(data.is_released || false),
     total_amount: totalAmount,
     invoice_date: data.invoice_date ? new Date(data.invoice_date) : new Date(),
     status: data.status || 'pending',

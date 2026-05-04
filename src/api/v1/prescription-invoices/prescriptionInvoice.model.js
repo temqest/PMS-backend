@@ -20,6 +20,9 @@ const prescriptionInvoiceSchema = new mongoose.Schema(
     health_record_id: { type: String, trim: true, default: '' },
     items: { type: [invoiceItemSchema], required: true, default: [] },
     prescription_names: { type: [String], default: [] },
+    // arbitrary variable field (can store small metadata) and release flag
+    variable: { type: mongoose.Schema.Types.Mixed, default: null },
+    is_released: { type: Boolean, default: false },
     total_amount: { type: Number, required: true, min: 0 },
     invoice_date: { type: Date, default: Date.now },
     status: { type: String, enum: ['pending', 'paid', 'cancelled'], default: 'pending' },

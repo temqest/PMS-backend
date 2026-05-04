@@ -24,6 +24,14 @@ const createPatientSchema = Joi.object({
     Joi.string().trim()
   ).optional().allow(null, ''),
   // Insurance (optional)
+  // New nested insurance object (preferred)
+  insurance: Joi.object({
+    provider: Joi.string().trim().optional().allow(null, ''),
+    coverage_percentage: Joi.number().min(0).max(100).optional().allow(null),
+    policy_number: Joi.string().trim().optional().allow(null, ''),
+    group_number: Joi.string().trim().optional().allow(null, ''),
+  }).optional().allow(null),
+  // Backwards-compatible flat fields (still accepted)
   insurance_provider: Joi.string().trim().optional().allow(null, ''),
   policy_number: Joi.string().trim().optional().allow(null, ''),
   group_number: Joi.string().trim().optional().allow(null, ''),
@@ -56,6 +64,14 @@ const updatePatientSchema = Joi.object({
     Joi.string().trim()
   ).optional().allow(null, ''),
   // Insurance (optional)
+  // New nested insurance object (preferred)
+  insurance: Joi.object({
+    provider: Joi.string().trim().optional().allow(null, ''),
+    coverage_percentage: Joi.number().min(0).max(100).optional().allow(null),
+    policy_number: Joi.string().trim().optional().allow(null, ''),
+    group_number: Joi.string().trim().optional().allow(null, ''),
+  }).optional().allow(null),
+  // Backwards-compatible flat fields (still accepted)
   insurance_provider: Joi.string().trim().optional().allow(null, ''),
   policy_number: Joi.string().trim().optional().allow(null, ''),
   group_number: Joi.string().trim().optional().allow(null, ''),
