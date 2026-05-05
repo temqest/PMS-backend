@@ -24,6 +24,22 @@ exports.getPatientById = asyncHandler(async (req, res) => {
   apiResponse.success(res, 200, { patient });
 });
 
+exports.getCurrentPatient = asyncHandler(async (req, res) => {
+  const actor = { id: req.user.sub, role: req.user.role, patient_id: req.user.patient_id, ip: req.ip };
+  const patientId = req.user.patient_id || req.user.sub;
+  const patient = await service.getPatientById(patientId, actor);
+  logger.info({ event: 'PATIENT_VIEWED_SELF', actor_id: actor.id, actor_role: actor.role, ip: actor.ip, patient_id: patientId });
+  apiResponse.success(res, 200, { patient });
+});
+
+exports.updateCurrentPatient = asyncHandler(async (req, res) => {
+  const actor = { id: req.user.sub, role: req.user.role, patient_id: req.user.patient_id, ip: req.ip };
+  const patientId = req.user.patient_id || req.user.sub;
+  const patient = await service.updatePatient(patientId, req.body, actor);
+  logger.info({ event: 'PATIENT_UPDATED_SELF', actor_id: actor.id, actor_role: actor.role, ip: actor.ip, patient_id: patientId });
+  apiResponse.success(res, 200, { patient });
+});
+
 exports.updatePatient = asyncHandler(async (req, res) => {
   const actor = { id: req.user.sub, role: req.user.role, ip: req.ip };
   const patient = await service.updatePatient(req.params.id, req.body, actor);

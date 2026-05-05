@@ -3,12 +3,20 @@ const service = require('./healthRecord.service');
 const apiResponse = require('../../../utils/apiResponse');
 
 exports.getHealthRecords = asyncHandler(async (req, res) => {
-  const result = await service.getHealthRecords(req.query);
+  const actor = { id: req.user?.sub, role: req.user?.role, patient_id: req.user?.patient_id, ip: req.ip };
+  const result = await service.getHealthRecords(req.query, actor);
+  apiResponse.success(res, 200, { records: result.records }, { results: result.results, pagination: result.pagination });
+});
+
+exports.getMyHealthRecords = asyncHandler(async (req, res) => {
+  const actor = { id: req.user?.sub, role: req.user?.role, patient_id: req.user?.patient_id, ip: req.ip };
+  const result = await service.getHealthRecords({ ...req.query, patient_id: req.user?.patient_id }, actor);
   apiResponse.success(res, 200, { records: result.records }, { results: result.results, pagination: result.pagination });
 });
 
 exports.getHealthRecordById = asyncHandler(async (req, res) => {
-  const record = await service.getHealthRecordById(req.params.id);
+  const actor = { id: req.user?.sub, role: req.user?.role, patient_id: req.user?.patient_id, ip: req.ip };
+  const record = await service.getHealthRecordById(req.params.id, actor);
   apiResponse.success(res, 200, { record });
 });
 

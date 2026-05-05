@@ -1,8 +1,8 @@
 const Joi = require('joi');
 
 const createAppointmentSchema = Joi.object({
-  patient_id: Joi.string().trim().required(),
-  patient_name: Joi.string().trim().required(),
+  patient_id: Joi.string().trim().optional(),
+  patient_name: Joi.string().trim().optional(),
   appointment_type: Joi.string().valid('In-Person', 'Telehealth').default('In-Person'),
   date: Joi.string().trim().required(),
   time: Joi.string().trim().required(),

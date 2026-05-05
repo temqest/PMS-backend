@@ -12,3 +12,17 @@ The Node backend proxies ML predictions through the Python service. Set the ML s
 - a deployed HTTPS URL for production or staging
 
 The frontend should point at the Node backend via `NEXT_PUBLIC_API_URL` so the browser always talks to the authenticated API layer instead of the ML service directly.
+
+## Persistent auth scripts
+
+Patient and admin authentication is now persisted in MongoDB via the `User` collection.
+
+- Create or update an admin account:
+  - `node scripts/createAdmin.js admin@clinic.com SecurePass123 "Admin User"`
+- Backfill patient auth users and export credentials:
+  - `node scripts/seedPatientAuthUsers.js`
+  - Default export path: `logs/patient-auth-credentials.csv`
+  - Use `--reset-passwords` to regenerate passwords for existing patient users and include new plaintext credentials in the export.
+  - Use `--output=logs/custom-name.csv` to change export path.
+
+Security note: the credential export contains plaintext passwords for bootstrap access. Keep it local, do not commit it, and rotate credentials after onboarding.

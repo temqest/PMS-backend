@@ -1,12 +1,9 @@
 #!/usr/bin/env node
 
-/**
- * Script to create an admin user for testing/development
- * Usage: node scripts/createAdmin.js <email> <password> [fullName]
- * Example: node scripts/createAdmin.js admin@clinic.com SecurePass123 "Admin User"
- */
-
+require('dotenv').config();
 const bcrypt = require('bcryptjs');
+const connectDB = require('../src/config/db');
+const User = require('../src/api/v1/auth/user.model');
 
 // Get command line arguments
 const [, , email, password, fullName] = process.argv;
@@ -31,33 +28,42 @@ if (password.length < 8) {
   process.exit(1);
 }
 
-// Hash the password
-const passwordHash = bcrypt.hashSync(password, 8);
+const run = async () => {
+  await connectDB();
+  const passwordHash = bcrypt.hashSync(password, 8);
 
-// Create admin user object
-const adminUser = {
-  id: Date.now().toString(),
-  username: email,
-  passwordHash,
-  role: 'system_admin',
-  fullName: fullName || email,
+  const adminUser = await User.findOneAndUpdate(
+    { email: email.toLowerCase() },
+    {
+      $set: {
+        email: email.toLowerCase(),
+        password_hash: passwordHash,
+        role: 'system_admin',
+        fullName: fullName || email,
+        patient_id: null,
+        is_active: true,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  console.log('\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('\x1b[32m%s\x1b[0m', '✓ Admin User Upserted Successfully');
+  console.log('\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  console.log('\x1b[33m%s\x1b[0m', 'Admin User Details:');
+  console.log('───────────────────────────────────────────────────');
+  console.log(`\x1b[36mID:\x1b[0m         ${String(adminUser._id)}`);
+  console.log(`\x1b[36mEmail:\x1b[0m      ${adminUser.email}`);
+  console.log(`\x1b[36mFull Name:\x1b[0m  ${adminUser.fullName || ''}`);
+  console.log(`\x1b[36mRole:\x1b[0m       ${adminUser.role}`);
+  console.log(`\x1b[36mActive:\x1b[0m     ${adminUser.is_active ? 'yes' : 'no'}`);
+  console.log('\n\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  process.exit(0);
 };
 
-console.log('\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-console.log('\x1b[32m%s\x1b[0m', '✓ Admin User Created Successfully');
-console.log('\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-console.log('\x1b[33m%s\x1b[0m', 'Admin User Details:');
-console.log('───────────────────────────────────────────────────');
-console.log(`\x1b[36mID:\x1b[0m         ${adminUser.id}`);
-console.log(`\x1b[36mEmail:\x1b[0m      ${adminUser.username}`);
-console.log(`\x1b[36mFull Name:\x1b[0m  ${adminUser.fullName}`);
-console.log(`\x1b[36mRole:\x1b[0m       ${adminUser.role}`);
-console.log(`\x1b[36mPermissions:\x1b[0m register, view, update, soft_delete, analytics`);
-
-console.log('\n\x1b[33m%s\x1b[0m', 'To add to your auth.service.js:');
-console.log('───────────────────────────────────────────────────');
-console.log('Add this object to the users array in src/api/v1/auth/auth.service.js:\n');
-console.log('\x1b[32m%s\x1b[0m', JSON.stringify(adminUser, null, 2));
-
-console.log('\n\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+run().catch((err) => {
+  console.error('\x1b[31m%s\x1b[0m', `❌ Error: ${err.message}`);
+  process.exit(2);
+});

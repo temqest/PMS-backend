@@ -17,7 +17,7 @@ const PERMISSIONS = {
   appointment_system: ['view:limited', 'update:appointment_ref'],
   emr_system: ['view:limited', 'update:emr_ref'],
   predictive_analytics: ['view:anonymized', 'analytics'],
-  patient: ['view:own'],
+  patient: ['view:own', 'create:own', 'update:own'],
   user: ['register', 'view', 'update'],
 };
 

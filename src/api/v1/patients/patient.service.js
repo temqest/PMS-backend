@@ -51,8 +51,8 @@ exports.getPatients = async (query = {}, actor = {}) => {
 
   const filter = {};
   // If a patient-role actor requests, restrict to their own record only
-  if (actor.role === ROLES.PATIENT && actor.id) {
-    filter.$or = [{ created_by: actor.id }, { patient_id: actor.id }];
+  if (actor.role === ROLES.PATIENT && actor.patient_id) {
+    filter.patient_id = actor.patient_id;
   }
   if (query.status) filter.status = query.status;
   if (query.search) {
@@ -103,8 +103,8 @@ exports.getPatientById = async (patientId, actor = {}) => {
   if (!patient) throw new AppError('Patient not found.', 404);
 
   // Ownership enforcement for patient role
-  if (actor.role === ROLES.PATIENT && actor.id) {
-    const ownerMatch = (patient.created_by && patient.created_by === actor.id) || (patient.patient_id && patient.patient_id === actor.id);
+  if (actor.role === ROLES.PATIENT && actor.patient_id) {
+    const ownerMatch = patient.patient_id === actor.patient_id;
     if (!ownerMatch) throw new AppError('Forbidden: cannot access other patient records.', 403);
   }
 
@@ -118,6 +118,26 @@ exports.updatePatient = async (patientId, updates, actor) => {
   // Prevent changing immutable patient_id
   if (updates.patient_id) delete updates.patient_id;
   updates.updated_by = actor?.id;
+
+  if (actor?.role === ROLES.PATIENT) {
+    if (!actor.patient_id || actor.patient_id !== patientId) {
+      throw new AppError('Forbidden: cannot update another patient profile.', 403);
+    }
+
+    const allowedFields = new Set([
+      'contact_number',
+      'email_address',
+      'address',
+      'emergency_contact_name',
+      'emergency_contact_relationship',
+      'emergency_contact_phone',
+    ]);
+    Object.keys(updates).forEach((key) => {
+      if (!allowedFields.has(key) && key !== 'updated_by' && key !== '__v') {
+        delete updates[key];
+      }
+    });
+  }
 
   // Support optimistic locking: clients can send __v in updates to assert version
   const clientVersion = typeof updates.__v !== 'undefined' ? updates.__v : null;

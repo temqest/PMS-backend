@@ -12,14 +12,18 @@ const buildScheduledAt = (date, time) => {
 
 const makeAppointmentId = () => `APT-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
-exports.getAppointments = async (query = {}) => {
+exports.getAppointments = async (query = {}, actor = {}) => {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
   const limit = Math.max(1, parseInt(query.limit, 10) || 20);
   const skip = (page - 1) * limit;
 
   const filter = {};
+  if (actor.role === 'patient' && actor.patient_id) {
+    filter.patient_id = actor.patient_id;
+  } else if (query.patient_id) {
+    filter.patient_id = query.patient_id;
+  }
   if (query.status) filter.status = query.status;
-  if (query.patient_id) filter.patient_id = query.patient_id;
   if (query.date) {
     const start = new Date(`${query.date}T00:00:00`);
     const end = new Date(`${query.date}T23:59:59.999`);
@@ -48,16 +52,29 @@ exports.createAppointment = async (data, actor) => {
   const scheduledAt = buildScheduledAt(data.date, data.time);
   if (!scheduledAt) throw new AppError('Invalid date or time.', 422);
 
+  const isPatient = actor?.role === 'patient';
+  const patientId = isPatient ? actor.patient_id : data.patient_id;
+  if (!patientId) {
+    throw new AppError('patient_id is required.', 422);
+  }
+
+  let patientName = data.patient_name || '';
+  if (isPatient) {
+    const patient = await Patient.findOne({ patient_id: patientId });
+    if (!patient) throw new AppError('Patient not found.', 404);
+    patientName = `${patient.first_name} ${patient.last_name}`.trim();
+  }
+
   const appointment = await Appointment.create({
     appointment_id: makeAppointmentId(),
-    patient_id: data.patient_id,
-    patient_name: data.patient_name,
+    patient_id: patientId,
+    patient_name: patientName,
     appointment_type: data.appointment_type || 'In-Person',
     scheduled_at: scheduledAt,
     duration_minutes: data.duration_minutes || 30,
     reason: data.reason || '',
     priority: data.priority || 'Routine',
-    status: data.status || 'Pending',
+    status: isPatient ? 'Pending' : (data.status || 'Pending'),
     send_email_reminder: !!data.send_email_reminder,
     send_sms_reminder: !!data.send_sms_reminder,
     send_confirmation: data.send_confirmation !== false,
@@ -91,6 +108,12 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
   if (!appointment) throw new AppError('Appointment not found.', 404);
   if (appointment.status === 'Cancelled') throw new AppError('Cancelled appointment cannot be updated.', 409);
 
+  if (actor?.role === 'patient') {
+    if (!actor.patient_id || appointment.patient_id !== actor.patient_id) {
+      throw new AppError('Forbidden: cannot modify another patient appointment.', 403);
+    }
+  }
+
   if (clientVersion !== null && appointment.__v !== clientVersion) {
     const err = new AppError('Conflict: resource has been modified.', 409);
     err.currentVersion = appointment.__v;
@@ -105,7 +128,9 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
     appointment.scheduled_at = scheduledAt;
   }
 
-  const assignable = [
+  const assignable = actor?.role === 'patient'
+    ? ['appointment_type', 'duration_minutes', 'reason', 'priority', 'send_email_reminder', 'send_sms_reminder', 'send_confirmation']
+    : [
     'patient_id',
     'patient_name',
     'appointment_type',
@@ -117,10 +142,14 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
     'send_sms_reminder',
     'send_confirmation',
     'internal_notes',
-  ];
+    ];
   assignable.forEach((key) => {
     if (typeof updates[key] !== 'undefined') appointment[key] = updates[key];
   });
+  if (actor?.role === 'patient') {
+    appointment.status = 'Pending';
+    appointment.internal_notes = appointment.internal_notes || '';
+  }
   appointment.updated_by = actor?.id;
 
   await appointment.save();
@@ -136,6 +165,29 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
 };
 
 exports.cancelAppointment = async (appointmentId, reason, actor) => {
+  if (actor?.role === 'patient') {
+    const appointment = await Appointment.findOne({ appointment_id: appointmentId });
+    if (!appointment) throw new AppError('Appointment not found.', 404);
+    if (!actor.patient_id || appointment.patient_id !== actor.patient_id) {
+      throw new AppError('Forbidden: cannot modify another patient appointment.', 403);
+    }
+
+    appointment.status = 'Pending';
+    appointment.cancel_reason = reason || 'Cancellation requested by patient';
+    appointment.updated_by = actor?.id;
+    await appointment.save();
+
+    logger.info({
+      event: 'APPOINTMENT_CANCELLATION_REQUESTED',
+      actor_id: actor?.id,
+      actor_role: actor?.role,
+      ip: actor?.ip,
+      appointment_id: appointment.appointment_id,
+    });
+
+    return appointment;
+  }
+
   const appointment = await Appointment.findOneAndUpdate(
     { appointment_id: appointmentId },
     {

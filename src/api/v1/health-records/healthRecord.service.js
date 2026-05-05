@@ -164,13 +164,17 @@ const validatePrescriptionMedicines = async (details = {}) => {
   };
 };
 
-exports.getHealthRecords = async (query = {}) => {
+exports.getHealthRecords = async (query = {}, actor = {}) => {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
   const limit = Math.max(1, parseInt(query.limit, 10) || 20);
   const skip = (page - 1) * limit;
 
   const filter = {};
-  if (query.patient_id) filter.patient_id = query.patient_id;
+  if (actor.role === 'patient' && actor.patient_id) {
+    filter.patient_id = actor.patient_id;
+  } else if (query.patient_id) {
+    filter.patient_id = query.patient_id;
+  }
   if (query.record_type) filter.record_type = query.record_type;
   if (query.save_state) filter.save_state = query.save_state;
   if (query.include_archived !== 'true') filter.archived = false;
@@ -196,9 +200,12 @@ exports.getHealthRecords = async (query = {}) => {
   };
 };
 
-exports.getHealthRecordById = async (recordId) => {
+exports.getHealthRecordById = async (recordId, actor = {}) => {
   const record = await HealthRecord.findOne({ record_id: recordId });
   if (!record) throw new AppError('Health record not found.', 404);
+  if (actor.role === 'patient' && actor.patient_id && record.patient_id !== actor.patient_id) {
+    throw new AppError('Forbidden: cannot access another patient record.', 403);
+  }
   return record;
 };
 

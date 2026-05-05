@@ -14,6 +14,9 @@ router.route('/')
   .post(allow('register'), validate(createPatientSchema), ctrl.registerPatient)
   .get(allow('view', 'view:limited', 'view:anonymized', 'view:own'), ctrl.getPatients);
 
+router.get('/me', allow('view', 'view:limited', 'view:anonymized', 'view:own'), ctrl.getCurrentPatient);
+router.patch('/me', allow('update:own', 'update'), validate(updatePatientSchema), ctrl.updateCurrentPatient);
+
 router.route('/:id')
   .get(allow('view', 'view:limited', 'view:anonymized', 'view:own'), ctrl.getPatientById)
   .patch(allow('update', 'update:medical'), validate(updatePatientSchema), ctrl.updatePatient)
