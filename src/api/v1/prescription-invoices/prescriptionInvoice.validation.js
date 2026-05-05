@@ -22,6 +22,11 @@ const createPrescriptionInvoiceSchema = Joi.object({
   status: Joi.string().valid('pending', 'paid', 'cancelled').default('pending'),
 }).unknown(true);
 
+const updatePrescriptionInvoiceStatusSchema = Joi.object({
+  status: Joi.string().valid('pending', 'paid', 'cancelled').required(),
+}).unknown(false);
+
 module.exports = {
   createPrescriptionInvoiceSchema,
+  updatePrescriptionInvoiceStatusSchema,
 };

@@ -42,6 +42,32 @@ exports.getPrescriptionInvoiceById = async (invoiceId) => {
   return invoice;
 };
 
+exports.updatePrescriptionInvoiceStatus = async (invoiceId, status, actor) => {
+  const invoice = await PrescriptionInvoice.findOneAndUpdate(
+    { invoice_id: invoiceId },
+    {
+      $set: {
+        status,
+        updated_by: actor?.id,
+      },
+    },
+    { returnDocument: 'after', runValidators: true }
+  );
+
+  if (!invoice) throw new AppError('Prescription invoice not found.', 404);
+
+  logger.info({
+    event: 'PRESCRIPTION_INVOICE_STATUS_UPDATED',
+    actor_id: actor?.id,
+    actor_role: actor?.role,
+    ip: actor?.ip,
+    invoice_id: invoice.invoice_id,
+    status: invoice.status,
+  });
+
+  return invoice;
+};
+
 exports.createPrescriptionInvoice = async (data, actor) => {
   const items = Array.isArray(data.items) ? data.items : [];
   if (!items.length) {

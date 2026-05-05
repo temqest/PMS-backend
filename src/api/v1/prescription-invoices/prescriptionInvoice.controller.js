@@ -12,6 +12,12 @@ exports.getPrescriptionInvoiceById = asyncHandler(async (req, res) => {
   apiResponse.success(res, 200, { invoice });
 });
 
+exports.updatePrescriptionInvoiceStatus = asyncHandler(async (req, res) => {
+  const actor = { id: req.apiKey?.createdBy, role: 'api_key', ip: req.ip };
+  const invoice = await service.updatePrescriptionInvoiceStatus(req.params.id, req.body.status, actor);
+  apiResponse.success(res, 200, { invoice });
+});
+
 exports.createPrescriptionInvoice = asyncHandler(async (req, res) => {
   const actor = { id: req.user?.sub, role: req.user?.role, ip: req.ip };
   const invoice = await service.createPrescriptionInvoice(req.body, actor);

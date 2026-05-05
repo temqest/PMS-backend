@@ -6,6 +6,8 @@ const AppError = require('../../../utils/AppError');
 const apiResponse = require('../../../utils/apiResponse');
 const { ROLES } = require('../../../config/constants');
 const prescriptionInvoiceCtrl = require('../prescription-invoices/prescriptionInvoice.controller');
+const { validate } = require('../../../middleware/validate.middleware');
+const { updatePrescriptionInvoiceStatusSchema } = require('../prescription-invoices/prescriptionInvoice.validation');
 const patientService = require('../patients/patient.service');
 const healthRecordService = require('../health-records/healthRecord.service');
 const rateLimiter = require('../../../middleware/rateLimiter');
@@ -63,6 +65,17 @@ router.get('/invoices', requirePermission('read:invoices'), prescriptionInvoiceC
  *   }
  */
 router.get('/invoices/:id', requirePermission('read:invoices'), prescriptionInvoiceCtrl.getPrescriptionInvoiceById);
+
+/**
+ * PATCH /api/v1/external/invoices/:id
+ * Update only the status of a prescription invoice (API key authenticated)
+ */
+router.patch(
+	'/invoices/:id',
+	requirePermission('write:invoices'),
+	validate(updatePrescriptionInvoiceStatusSchema),
+	prescriptionInvoiceCtrl.updatePrescriptionInvoiceStatus
+);
 
 /**
  * GET /api/v1/external/patients

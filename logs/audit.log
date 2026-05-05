@@ -343,3 +343,5 @@
 {"level":"info","message":{"actor_id":"1777432837989","actor_role":"system_admin","event":"PATIENT_VIEWED","ip":"::1","patient_id":"PAT-20260504-0010"},"timestamp":"2026-05-04T09:31:51.599Z"}
 {"level":"info","message":{"actor_id":"1777432837989","actor_role":"system_admin","event":"PATIENT_VIEWED","ip":"::1","patient_id":"PAT-20260504-0010"},"timestamp":"2026-05-04T09:31:51.679Z"}
 {"level":"info","message":{"actor_id":"1777432837989","actor_role":"system_admin","event":"PATIENT_VIEWED","ip":"::1","patient_id":"PAT-20260504-0010"},"timestamp":"2026-05-04T09:42:10.539Z"}
+{"level":"info","message":{"actor_id":"test-admin","actor_role":"api_key","event":"PRESCRIPTION_INVOICE_STATUS_UPDATED","invoice_id":"INV-2e-moqykdfp","ip":"::ffff:127.0.0.1","status":"paid"},"timestamp":"2026-05-05T03:27:17.864Z"}
+{"level":"info","message":{"actor_id":"test-admin","actor_role":"api_key","event":"PRESCRIPTION_INVOICE_STATUS_UPDATED","invoice_id":"INV-2e-moqykdfp","ip":"::ffff:127.0.0.1","status":"paid"},"timestamp":"2026-05-05T03:27:35.622Z"}
