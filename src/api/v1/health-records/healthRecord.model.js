@@ -14,6 +14,7 @@ const healthRecordSchema = new mongoose.Schema(
     provider: { type: String, required: true, trim: true },
     save_state: { type: String, enum: ['draft', 'final'], default: 'final' },
     summary: { type: String, trim: true, default: '' },
+    /** Per-type shape validated by Joi; normalized on write via healthRecord.normalize.js */
     details: { type: mongoose.Schema.Types.Mixed, default: {} },
     archived: { type: Boolean, default: false },
     archived_at: { type: Date },

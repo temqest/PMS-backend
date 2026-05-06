@@ -7,6 +7,7 @@ const hpp = require('hpp');
 const compression = require('compression');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
+const { corsOptions } = require('./config/cors');
 
 const errorHandler = require('./middleware/errorHandler');
 const patientRoutes = require('./api/v1/patients/patient.routes');
@@ -24,7 +25,7 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 // Skip mongo sanitization in test env because some test request objects are read-only
 // and the sanitizer attempts to reassign `req.query` which can cause errors
 // in some serverless environments (Vercel). Use the library's `sanitize`

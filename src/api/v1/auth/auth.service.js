@@ -95,14 +95,14 @@ exports.getPendingUsers = async () => {
 
 // Activate a user account
 exports.activateUser = async (userId) => {
-  const user = await User.findByIdAndUpdate(userId, { $set: { is_active: true } }, { new: true });
+  const user = await User.findByIdAndUpdate(userId, { $set: { is_active: true } }, { returnDocument: 'after' });
   if (!user) throw new AppError('User not found', 404);
   return toPublicUser(user);
 };
 
 // Deactivate a user account
 exports.deactivateUser = async (userId) => {
-  const user = await User.findByIdAndUpdate(userId, { $set: { is_active: false } }, { new: true });
+  const user = await User.findByIdAndUpdate(userId, { $set: { is_active: false } }, { returnDocument: 'after' });
   if (!user) throw new AppError('User not found', 404);
   return toPublicUser(user);
 };

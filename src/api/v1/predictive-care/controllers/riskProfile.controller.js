@@ -9,17 +9,21 @@ const {
   computePredictiveCareForAllActivePatients,
 } = require('../services/predictiveCareOrchestrator.service');
 const {
-  mergeMLIntoRiskProfile,
   triggerRetraining,
   getLabForecast,
+  getMlServiceStatus,
 } = require('../services/mlPrediction.service');
+const { PREDICTIVE_CARE_DISCLAIMER } = require('../../../../config/predictiveCare');
 
 exports.getPatientRiskProfile = asyncHandler(async (req, res) => {
   const profile = await PatientRiskProfile.findOne({ patient_id: req.params.patientId });
   if (!profile) {
     throw new AppError('Risk profile not yet computed for this patient.', 404);
   }
-  apiResponse.success(res, 200, { profile });
+  apiResponse.success(res, 200, {
+    profile,
+    predictive_care_disclaimer: PREDICTIVE_CARE_DISCLAIMER,
+  });
 });
 
 exports.getAllRiskProfiles = asyncHandler(async (req, res) => {
@@ -47,9 +51,12 @@ exports.computeForPatient = asyncHandler(async (req, res) => {
   }
 
   await computePredictiveCareForPatient(patient);
-  const ruleBasedProfile = await PatientRiskProfile.findOne({ patient_id: patient.patient_id });
-  const profile = await mergeMLIntoRiskProfile(patient.patient_id, ruleBasedProfile);
-  apiResponse.success(res, 200, { message: 'Risk profile computed successfully.', profile });
+  const profile = await PatientRiskProfile.findOne({ patient_id: patient.patient_id });
+  apiResponse.success(res, 200, {
+    message: 'Risk profile computed successfully.',
+    profile,
+    predictive_care_disclaimer: PREDICTIVE_CARE_DISCLAIMER,
+  });
 });
 
 exports.computeForAll = asyncHandler(async (req, res) => {
@@ -65,6 +72,11 @@ exports.computeForAll = asyncHandler(async (req, res) => {
 exports.retrainModels = asyncHandler(async (req, res) => {
   const result = await triggerRetraining(req.body.models || ['all']);
   apiResponse.success(res, 200, result || { message: 'Retrain triggered (or ML service unavailable)' });
+});
+
+exports.mlStatus = asyncHandler(async (req, res) => {
+  const status = await getMlServiceStatus();
+  apiResponse.success(res, 200, status);
 });
 
 exports.labForecast = asyncHandler(async (req, res) => {

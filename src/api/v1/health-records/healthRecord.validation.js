@@ -3,6 +3,7 @@ const Joi = require('joi');
 const recordTypes = ['Visit', 'Lab Result', 'Imaging', 'Prescription', 'Vaccination', 'Note'];
 const saveStates = ['draft', 'final'];
 const visitTypes = ['Follow-up', 'Annual Physical', 'Urgent', 'Consultation', 'Procedure'];
+const visitDispositions = ['Routine', 'Urgent', 'Referred', 'Observation', 'Other'];
 const labStatuses = ['Normal', 'Abnormal', 'Critical'];
 const imagingTypes = ['X-Ray', 'CT', 'MRI', 'Ultrasound', 'PET', 'Mammography'];
 const prescriptionForms = ['Tablet', 'Capsule', 'Liquid', 'Injection', 'Topical'];
@@ -60,6 +61,9 @@ const visitDetailsSchema = Joi.object({
   summary: Joi.string().trim().allow('').optional(),
   visitReason: Joi.string().trim().required(),
   visitType: Joi.string().valid(...visitTypes).required(),
+  chiefComplaint: Joi.string().trim().allow('').max(500).optional(),
+  visitDisposition: Joi.string().valid(...visitDispositions).allow('').optional(),
+  followUpDueDate: Joi.string().trim().allow('').optional(),
   visitBpSystolic: Joi.string().trim().allow('').optional(),
   visitBpDiastolic: Joi.string().trim().allow('').optional(),
   visitHeartRate: Joi.string().trim().allow('').optional(),
@@ -78,7 +82,12 @@ const labDetailsSchema = Joi.object({
   labResultValue: Joi.string().trim().required(),
   labUnit: Joi.string().trim().allow('').optional(),
   labReferenceRange: Joi.string().trim().allow('').optional(),
-  labStatus: Joi.string().valid(...labStatuses).optional(),
+  labStatus: Joi.when('labResultValue', {
+    is: Joi.string().trim().min(1),
+    then: Joi.string().valid(...labStatuses).required(),
+    otherwise: Joi.string().valid(...labStatuses).optional(),
+  }),
+  labResultNumeric: Joi.number().optional(),
   labFlagForReview: Joi.boolean().optional(),
   labOrderingProvider: Joi.string().trim().allow('').optional(),
   labNotes: Joi.string().trim().allow('').optional(),
@@ -175,4 +184,6 @@ const updateHealthRecordSchema = Joi.object({
 module.exports = {
   createHealthRecordSchema,
   updateHealthRecordSchema,
+  visitDispositions,
+  labStatuses,
 };

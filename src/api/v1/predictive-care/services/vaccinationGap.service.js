@@ -50,7 +50,7 @@ const checkVaccinationGapsForPatient = async (patient_id, patient_name) => {
             },
             triggered_at: new Date(),
           },
-          { upsert: true, new: true }
+          { upsert: true, returnDocument: 'after' }
         );
       }
     }

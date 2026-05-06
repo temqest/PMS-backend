@@ -1,8 +1,10 @@
 const Patient = require('../../patients/patient.model');
+const PatientRiskProfile = require('../models/patientRiskProfile.model');
 const { computeLabTrendsForPatient } = require('./labTrend.service');
 const { computeRiskProfileForPatient } = require('./riskScore.service');
 const { checkVaccinationGapsForPatient } = require('./vaccinationGap.service');
 const { computeAdherenceForPatient } = require('./adherence.service');
+const { mergeMLIntoRiskProfile } = require('./mlPrediction.service');
 
 const patientDisplayName = (patient) =>
   `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
@@ -18,6 +20,10 @@ const computePredictiveCareForPatient = async (patient) => {
     computeAdherenceForPatient(patient.patient_id, name),
   ]);
   await computeRiskProfileForPatient(patient);
+  const ruleBased = await PatientRiskProfile.findOne({ patient_id: patient.patient_id });
+  if (ruleBased) {
+    await mergeMLIntoRiskProfile(patient.patient_id, ruleBased);
+  }
 };
 
 const computePredictiveCareForAllActivePatients = async () => {

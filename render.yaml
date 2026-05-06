@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: pms-backend-api
+    runtime: node
+    rootDir: .
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+
+  - type: web
+    name: pms-ml-service
+    runtime: python
+    rootDir: machine_learning_backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+
+  - type: web
+    name: pms-frontend-web
+    runtime: node
+    rootDir: pms-frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    autoDeploy: true

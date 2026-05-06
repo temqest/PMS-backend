@@ -4,6 +4,7 @@ const Appointment = require('../../appointments/appointment.model');
 const PatientRiskProfile = require('../models/patientRiskProfile.model');
 const CareAlert = require('../models/careAlert.model');
 const AdherenceRecord = require('../models/adherenceRecord.model');
+const { overallRiskScore, overallRiskLevel } = require('./predictiveCareScoring');
 
 const HIGH_RISK_DIAGNOSES = [
   'hypertension',
@@ -90,12 +91,9 @@ const computeRiskProfileForPatient = async (patient) => {
   const noShowScore = computeNoShowScore(appointments);
   const hasCriticalLabs = labRecords.some((r) => r.details?.labStatus === 'Critical');
 
-  const overallScore = Math.round(
-    chronicScore * 0.35 + readmissionScore * 0.25 + noShowScore * 0.15 + adherenceRisk * 0.25
-  );
+  const overallScore = overallRiskScore(chronicScore, readmissionScore, noShowScore, adherenceRisk);
 
-  const riskLevel =
-    overallScore >= 75 ? 'Critical' : overallScore >= 50 ? 'High' : overallScore >= 25 ? 'Moderate' : 'Low';
+  const riskLevel = overallRiskLevel(overallScore);
 
   const profile = await PatientRiskProfile.findOneAndUpdate(
     { patient_id },
@@ -112,7 +110,7 @@ const computeRiskProfileForPatient = async (patient) => {
       last_computed_at: new Date(),
       record_count_at_last_compute: allRecords,
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
 
   if (overallScore >= 50) {
@@ -132,7 +130,7 @@ const computeRiskProfileForPatient = async (patient) => {
         },
         triggered_at: new Date(),
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
   }
 

@@ -79,7 +79,7 @@ const run = async () => {
           is_active: true,
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
     );
 
     if (existing) updated += 1;

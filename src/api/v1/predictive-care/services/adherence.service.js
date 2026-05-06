@@ -140,7 +140,7 @@ const computeAdherenceForPatient = async (patient_id, patient_name) => {
         longest_gap_days: longestGap,
         last_assessed_at: new Date(),
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     if (status !== 'Adherent') {
@@ -167,7 +167,7 @@ const computeAdherenceForPatient = async (patient_id, patient_name) => {
           },
           triggered_at: new Date(),
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
     }
   }

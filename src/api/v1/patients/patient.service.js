@@ -166,7 +166,7 @@ exports.softDeletePatient = async (patientId, actor) => {
   const patient = await Patient.findOneAndUpdate(
     { patient_id: patientId },
     { $set: { status: 'archived', updated_by: actor?.id } },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!patient) throw new AppError('Patient not found.', 404);
 
@@ -178,7 +178,7 @@ exports.linkAppointment = async (patientId, appointmentRef, actor) => {
   const patient = await Patient.findOneAndUpdate(
     { patient_id: patientId },
     { $push: { appointment_refs: appointmentRef }, $set: { updated_by: actor?.id } },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!patient) throw new AppError('Patient not found.', 404);
   logger.info({ event: 'APPOINTMENT_LINKED', actor_id: actor?.id, actor_role: actor?.role, ip: actor?.ip, patient_id: patientId, appointmentRef });
@@ -189,7 +189,7 @@ exports.updateMedicalHistory = async (patientId, medicalHistoryRef, actor) => {
   const patient = await Patient.findOneAndUpdate(
     { patient_id: patientId },
     { $set: { medical_history_ref: medicalHistoryRef, updated_by: actor?.id } },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!patient) throw new AppError('Patient not found.', 404);
   logger.info({ event: 'MEDICAL_HISTORY_UPDATED', actor_id: actor?.id, actor_role: actor?.role, ip: actor?.ip, patient_id: patientId });

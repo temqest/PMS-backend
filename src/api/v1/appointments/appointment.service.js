@@ -85,7 +85,7 @@ exports.createAppointment = async (data, actor) => {
   await Patient.findOneAndUpdate(
     { patient_id: data.patient_id },
     { $addToSet: { appointment_refs: appointment.appointment_id }, $set: { updated_by: actor?.id } },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   logger.info({
@@ -198,7 +198,7 @@ exports.cancelAppointment = async (appointmentId, reason, actor) => {
         updated_by: actor?.id,
       },
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!appointment) throw new AppError('Appointment not found.', 404);
 

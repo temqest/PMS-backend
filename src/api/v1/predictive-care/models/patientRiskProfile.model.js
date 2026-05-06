@@ -35,6 +35,16 @@ const patientRiskProfileSchema = new mongoose.Schema(
     ml_anomaly_score: { type: Number },
     ml_computed_at: { type: Date },
     ml_service_used: { type: Boolean, default: false },
+    ml_feature_version: { type: String },
+    ml_label_definition: { type: String },
+    ml_last_feature_snapshot: { type: mongoose.Schema.Types.Mixed },
+    ml_explanation: [
+      {
+        feature: { type: String },
+        importance: { type: Number },
+        resolved_value: { type: mongoose.Schema.Types.Mixed },
+      },
+    ],
 
     last_computed_at: { type: Date, default: Date.now },
     record_count_at_last_compute: { type: Number, default: 0 },

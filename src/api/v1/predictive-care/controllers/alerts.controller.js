@@ -33,7 +33,7 @@ exports.resolveAlert = asyncHandler(async (req, res) => {
       resolved_at: new Date(),
       resolved_by: req.body.resolved_by || 'staff',
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!alert) {
     throw new AppError('Alert not found.', 404);
@@ -42,7 +42,7 @@ exports.resolveAlert = asyncHandler(async (req, res) => {
 });
 
 exports.markAlertRead = asyncHandler(async (req, res) => {
-  const alert = await CareAlert.findByIdAndUpdate(req.params.id, { is_read: true }, { new: true });
+  const alert = await CareAlert.findByIdAndUpdate(req.params.id, { is_read: true }, { returnDocument: 'after' });
   if (!alert) {
     throw new AppError('Alert not found.', 404);
   }

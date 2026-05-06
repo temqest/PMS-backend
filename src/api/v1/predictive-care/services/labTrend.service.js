@@ -26,7 +26,13 @@ const computeLabTrendsForPatient = async (patient_id, patient_name) => {
     if (!byTest[name]) byTest[name] = [];
 
     const rawStr = record.details?.labResultValue != null ? String(record.details.labResultValue) : '';
-    const numericValue = parseFloat(rawStr.replace(/,/g, ''));
+    const fromNumeric =
+      typeof record.details?.labResultNumeric === 'number' && Number.isFinite(record.details.labResultNumeric)
+        ? record.details.labResultNumeric
+        : NaN;
+    const numericValue = Number.isFinite(fromNumeric)
+      ? fromNumeric
+      : parseFloat(rawStr.replace(/,/g, '').split(/\s+/)[0]);
     if (Number.isNaN(numericValue)) continue;
 
     byTest[name].push({
@@ -58,7 +64,7 @@ const computeLabTrendsForPatient = async (patient_id, patient_name) => {
         last_recorded_at: lastPoint.recorded_at,
         alert_triggered: consecutiveAbnormal >= 2 || trend.severity === 'Severe',
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     if (consecutiveAbnormal >= 2) {
@@ -124,8 +130,8 @@ const upsertLabAlert = async (
         consecutive_abnormal: consecutiveCount,
       },
       triggered_at: new Date(),
-    },
-    { upsert: true, new: true }
+      },
+    { upsert: true, returnDocument: 'after' }
   );
 };
 

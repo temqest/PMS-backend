@@ -22,6 +22,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 const { spawnSync } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
@@ -52,14 +53,24 @@ function maskMongoUri(uri) {
   return String(uri).replace(/:\/\/([^:@/]+):([^@/]+)@/, '://$1:***@');
 }
 
+function splitCommandLine(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  if (fs.existsSync(raw)) return [raw];
+  return (raw.match(/"[^"]+"|'[^']+'|\S+/g) || []).map((part) =>
+    part.replace(/^(['"])(.*)\1$/, '$2')
+  );
+}
+
 function runStep(command, args, options, stepLabel) {
   const result = spawnSync(command, args, options);
   if (result.status !== 0) {
-    throw new Error(`${stepLabel} failed with exit code ${result.status}`);
+    const cause = result.error ? ` (${result.error.message})` : '';
+    throw new Error(`${stepLabel} failed with exit code ${result.status}${cause}`);
   }
 }
 
-function main() {
+async function main() {
   const baseUri = process.env.MONGO_URI || 'mongodb://localhost:27017/pms';
   const trainingDbName = process.env.ML_TRAINING_DB_NAME || 'pms_ml_training';
   const trainingUri = process.env.ML_TRAINING_MONGO_URI || withDbName(baseUri, trainingDbName);
@@ -69,15 +80,15 @@ function main() {
   const windowMonths = parseInt(process.env.ML_TRAINING_WINDOW_MONTHS || '24', 10);
   const highRiskCount = parseInt(process.env.ML_TRAINING_HIGH_RISK_COUNT || '24', 10);
 
-  const runPredictive = toBool(process.env.ML_TRAINING_RUN_PREDICTIVE, true);
+  const runPredictive = (process.env.ML_TRAINING_RUN_PREDICTIVE === undefined) ? false : toBool(process.env.ML_TRAINING_RUN_PREDICTIVE, true);
   const runModels = toBool(process.env.ML_TRAINING_RUN_MODELS, true);
 
   // Allow specifying a python launcher with optional args, e.g. "py -3" or a full path
   const pythonExecRaw = process.env.ML_TRAINING_PYTHON_EXEC || 'python';
-  const pythonExecParts = String(pythonExecRaw).trim().split(/\s+/).filter(Boolean);
+  const pythonExecParts = splitCommandLine(pythonExecRaw);
   const pythonCommand = pythonExecParts[0];
   const pythonExtraArgs = pythonExecParts.slice(1);
-  const modelDir = process.env.ML_TRAINING_MODEL_DIR || path.join(mlBackendDir, 'models_training');
+  const modelDir = process.env.ML_TRAINING_MODEL_DIR || path.join(mlBackendDir, 'models');
 
   console.log('[ML-TRAINING] Starting isolated seed + training pipeline');
   console.log(`[ML-TRAINING] Target DB name: ${trainingDbName}`);
@@ -96,7 +107,36 @@ function main() {
   };
 
   console.log('[ML-TRAINING] Seeding isolated database...');
-  runStep('node', [seedScript], { cwd: projectRoot, env: seedEnv, stdio: 'inherit' }, 'Seeding');
+  let seeded = false;
+  try {
+    // Ensure the programmatic seeder uses the isolated database URI.
+    process.env.MONGO_URI = trainingUri;
+    process.env.SEED_PATIENT_COUNT = String(patientCount);
+    process.env.SEED_RANDOM_SEED = String(randomSeed);
+    process.env.SEED_WINDOW_MONTHS = String(windowMonths);
+    process.env.SEED_HIGH_RISK_COUNT = String(highRiskCount);
+    process.env.SEED_RUN_PREDICTIVE = runPredictive ? 'true' : 'false';
+
+    // eslint-disable-next-line global-require, import/no-dynamic-require
+    const seedModule = require(path.join(projectRoot, 'scripts', 'seedTestData.js'));
+    if (seedModule && typeof seedModule.seedDatabase === 'function' && typeof seedModule.connectDB === 'function') {
+      console.log('[ML-TRAINING] Using programmatic seeder (seedDatabase)');
+      await seedModule.connectDB();
+      await seedModule.seedDatabase({
+        patientCount,
+        seed: randomSeed,
+        windowMonths,
+        runPredictive,
+      });
+      seeded = true;
+    }
+  } catch (err) {
+    console.log('[ML-TRAINING] Programmatic seeder unavailable or failed, falling back to spawning node:', err && err.message);
+  }
+
+  if (!seeded) {
+    runStep('node', [seedScript], { cwd: projectRoot, env: seedEnv, stdio: 'inherit' }, 'Seeding');
+  }
 
   if (!runModels) {
     console.log('[ML-TRAINING] Skipping model training (ML_TRAINING_RUN_MODELS=false).');
@@ -116,6 +156,31 @@ function main() {
     'training/train_lab_forecast.py',
     'training/train_anomaly.py',
   ];
+
+  // Archive existing models if any
+  try {
+    const fs = require('fs');
+    const archiveDir = path.join(mlBackendDir, 'models_archive');
+    if (fs.existsSync(path.join(modelDir))) {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const dest = path.join(archiveDir, ts);
+      fs.mkdirSync(dest, { recursive: true });
+      // copy files
+      const files = fs.readdirSync(modelDir).filter((f) => f.endsWith('.joblib') || f.endsWith('.pkl') || f === '.gitkeep');
+      for (const f of files) {
+        const src = path.join(modelDir, f);
+        const dst = path.join(dest, f);
+        try {
+          fs.copyFileSync(src, dst);
+        } catch (copyErr) {
+          console.warn('[ML-TRAINING] Warning copying file to archive:', copyErr && copyErr.message);
+        }
+      }
+      console.log(`[ML-TRAINING] Archived ${files.length} files to ${dest}`);
+    }
+  } catch (archiveErr) {
+    console.warn('[ML-TRAINING] Failed to archive existing models:', archiveErr && archiveErr.message);
+  }
 
   for (const script of trainingScripts) {
     console.log(`[ML-TRAINING] Running ${script}...`);

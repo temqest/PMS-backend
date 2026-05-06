@@ -2,6 +2,7 @@ const HealthRecord = require('./healthRecord.model');
 const invoiceService = require('../prescription-invoices/prescriptionInvoice.service');
 const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
+const { normalizeHealthRecordDetails } = require('./healthRecord.normalize');
 
 const INVENTORY_CACHE_TTL = 60 * 1000;
 let prescriptionInventoryCache = { timestamp: 0, items: [] };
@@ -220,6 +221,8 @@ exports.createHealthRecord = async (data, actor) => {
 
   if (data.record_type === 'Prescription') {
     normalizedDetails = await validatePrescriptionMedicines(normalizedDetails);
+  } else {
+    normalizedDetails = normalizeHealthRecordDetails(data.record_type, normalizedDetails);
   }
 
   const record = await HealthRecord.create({
@@ -280,7 +283,7 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
     if (effectiveType === 'Prescription') {
       record.details = await validatePrescriptionMedicines(updates.details || {});
     } else {
-      record.details = updates.details;
+      record.details = normalizeHealthRecordDetails(effectiveType, updates.details || {});
     }
   }
   record.updated_by = actor?.id;
@@ -310,7 +313,7 @@ exports.deleteHealthRecord = async (recordId, actor) => {
         updated_by: actor?.id,
       },
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!record) throw new AppError('Health record not found.', 404);
 

@@ -13,6 +13,10 @@ The Node backend proxies ML predictions through the Python service. Set the ML s
 
 The frontend should point at the Node backend via `NEXT_PUBLIC_API_URL` so the browser always talks to the authenticated API layer instead of the ML service directly.
 
+**Clinical / product note:** predictive outputs are **decision support only** (see `predictive_care_disclaimer` on profile API responses). Utilization risk uses a **visit-based 90-day proxy** when hospitalization data is not modeled; train the Python models after large data imports (`machine_learning_backend/README.md`).
+
+**Retraining:** authorized roles can call `POST /api/v1/predictive-care/ml/retrain`, which forwards to the FastAPI `POST /train` on the ML service.
+
 ## Persistent auth scripts
 
 Patient and admin authentication is now persisted in MongoDB via the `User` collection.

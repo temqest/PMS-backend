@@ -59,6 +59,12 @@ router.post(
   riskProfile.retrainModels
 );
 
+router.get(
+  '/ml/status',
+  allow(...readAccess),
+  riskProfile.mlStatus
+);
+
 // ----- Alerts -----
 router.get(
   '/alerts',

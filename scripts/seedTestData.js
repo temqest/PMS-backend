@@ -900,11 +900,17 @@ function finalizePatientStats(patients, records) {
   }
 }
 
-const seedDatabase = async () => {
-  const patientCount = Math.max(8, parseInt(process.env.SEED_PATIENT_COUNT || '60', 10) || 60);
-  const seedNum = parseInt(process.env.SEED_RANDOM_SEED || '42', 10) || 42;
-  const windowMonths = Math.max(6, parseInt(process.env.SEED_WINDOW_MONTHS || '20', 10) || 20);
-  const runPredictive = String(process.env.SEED_RUN_PREDICTIVE || 'true').toLowerCase() !== 'false';
+const seedDatabase = async (opts = {}) => {
+  const patientCount = Math.max(
+    8,
+    parseInt(opts.patientCount ?? process.env.SEED_PATIENT_COUNT ?? '60', 10) || 60
+  );
+  const seedNum = parseInt(opts.seed ?? process.env.SEED_RANDOM_SEED ?? '42', 10) || 42;
+  const windowMonths = Math.max(
+    6,
+    parseInt(opts.windowMonths ?? process.env.SEED_WINDOW_MONTHS ?? '20', 10) || 20
+  );
+  const runPredictive = String(opts.runPredictive ?? process.env.SEED_RUN_PREDICTIVE ?? 'true').toLowerCase() !== 'false';
 
   const rnd = mulberry32(seedNum);
   const windowEnd = dayjs().subtract(1, 'day').endOf('day');
@@ -1017,4 +1023,12 @@ const seedDatabase = async () => {
   }
 };
 
-connectDB().then(() => seedDatabase());
+module.exports = { seedDatabase, connectDB };
+
+if (require.main === module) {
+  // CLI invocation: connect then run with env-driven options
+  connectDB().then(() => seedDatabase()).catch((err) => {
+    console.error('Seeding failed:', err);
+    process.exit(1);
+  });
+}
