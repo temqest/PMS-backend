@@ -5,6 +5,18 @@ const logger = require('../../../utils/logger');
 const { ROLES } = require('../../../config/constants');
 const { anonymizePatient, anonymizePatients } = require('../../../utils/anonymize');
 
+const DEFAULT_LIFESTYLE = Object.freeze({
+  smoking: false,
+  alcohol: false,
+  diet: '',
+  physical_activity: '',
+});
+
+const normalizeLifestyle = (lifestyle = {}) => ({
+  ...DEFAULT_LIFESTYLE,
+  ...(lifestyle && typeof lifestyle === 'object' ? lifestyle : {}),
+});
+
 exports.registerPatient = async (data, actor) => {
   // Duplicate detection: contact_number OR national_id
   const dupFilter = [];
@@ -27,7 +39,11 @@ exports.registerPatient = async (data, actor) => {
   while (attempt < maxRetries) {
     attempt += 1;
     const patient_id = await generatePatientId();
-    const toCreate = Object.assign({}, data, { patient_id, created_by: actor?.id });
+    const toCreate = Object.assign({}, data, {
+      patient_id,
+      created_by: actor?.id,
+      lifestyle: normalizeLifestyle(data.lifestyle),
+    });
     try {
       patient = await Patient.create(toCreate);
       logger.info({ event: 'PATIENT_CREATED', actor_id: actor?.id, actor_role: actor?.role, ip: actor?.ip, patient_id });
@@ -153,6 +169,13 @@ exports.updatePatient = async (patientId, updates, actor) => {
   }
 
   Object.keys(updates).forEach((k) => {
+    if (k === 'lifestyle') {
+      patientDoc.lifestyle = normalizeLifestyle({
+        ...(patientDoc.lifestyle?.toObject ? patientDoc.lifestyle.toObject() : patientDoc.lifestyle || {}),
+        ...(updates.lifestyle || {}),
+      });
+      return;
+    }
     patientDoc[k] = updates[k];
   });
 

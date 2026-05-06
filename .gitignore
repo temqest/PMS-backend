@@ -11,6 +11,7 @@ build/
 API_KEY_USAGE_GUIDE.md
 
 # Frontend
+pms-frontend/
 pms-frontend/node_modules/
 pms-frontend/.next/
 pms-frontend/out/
@@ -19,6 +20,7 @@ pms-frontend/.env.*
 !pms-frontend/.env.example
 
 # ML service
+machine_learning_backend/
 machine_learning_backend/venv/
 machine_learning_backend/.python-packages/
 machine_learning_backend/__pycache__/

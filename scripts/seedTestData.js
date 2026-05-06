@@ -16,9 +16,12 @@ const mongoose = require('mongoose');
 const dayjs = require('dayjs');
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
+const connectDB = require('../src/config/db');
 const Patient = require('../src/api/v1/patients/patient.model');
+const User = require('../src/api/v1/auth/user.model');
 const Appointment = require('../src/api/v1/appointments/appointment.model');
 const HealthRecord = require('../src/api/v1/health-records/healthRecord.model');
 const PrescriptionInvoice = require('../src/api/v1/prescription-invoices/prescriptionInvoice.model');
@@ -26,6 +29,20 @@ const PatientRiskProfile = require('../src/api/v1/predictive-care/models/patient
 const CareAlert = require('../src/api/v1/predictive-care/models/careAlert.model');
 const LabTrend = require('../src/api/v1/predictive-care/models/labTrend.model');
 const AdherenceRecord = require('../src/api/v1/predictive-care/models/adherenceRecord.model');
+const { categorizeCondition } = require('../src/api/v1/health-records/conditionCategory.helper');
+
+const DEFAULT_CREDENTIALS_EXPORT = path.join('logs', 'patient-auth-credentials.csv');
+const DEFAULT_PASSWORD_PREFIX = 'SeedPatient!';
+const INSURANCE_PROVIDERS = [
+  { name: 'HealthFirst Ins.', planCode: 'HMO' },
+  { name: 'Medicare Plus', planCode: 'GOV' },
+  { name: 'CareShield', planCode: 'PPO' },
+  { name: 'WellCover Health', planCode: 'EPO' },
+  { name: 'Global Health Assure', planCode: 'PPO' },
+  { name: 'FamilyHealth Insurance', planCode: 'HMO' },
+  { name: 'PremierCare', planCode: 'POS' },
+  { name: 'Unity Health Cover', planCode: 'EPO' },
+];
 
 const COHORT_CYCLE = [
   'healthy_low_util',
@@ -90,6 +107,18 @@ const noteTemplates = [
   'Follow-up appointment scheduled in 2 weeks.',
   'Results reviewed and conveyed to patient.',
 ];
+const lifestyleProfiles = [
+  { smoking: false, alcohol: false, diet: 'Balanced diet', physical_activity: 'Moderate exercise' },
+  { smoking: false, alcohol: true, diet: 'Balanced diet', physical_activity: 'Active lifestyle' },
+  { smoking: false, alcohol: true, diet: 'Vegetarian', physical_activity: 'Daily walking' },
+  { smoking: false, alcohol: false, diet: 'Low carb diet', physical_activity: 'Light exercise' },
+  { smoking: true, alcohol: true, diet: 'Frequent fast food intake', physical_activity: 'Sedentary' },
+  { smoking: true, alcohol: false, diet: 'High sodium diet', physical_activity: 'Occasional exercise' },
+  { smoking: false, alcohol: false, diet: 'Diabetic diet', physical_activity: 'Daily walking' },
+  { smoking: false, alcohol: true, diet: 'High sugar intake', physical_activity: 'Sedentary' },
+  { smoking: false, alcohol: false, diet: 'Balanced diet', physical_activity: 'Light exercise' },
+  { smoking: true, alcohol: true, diet: 'High sodium diet', physical_activity: 'Sedentary' },
+];
 const prescriptionForms = ['Tablet', 'Capsule', 'Liquid', 'Injection', 'Topical'];
 const imagingBodyParts = ['Chest', 'Abdomen', 'Head', 'Knee', 'Spine', 'Pelvis', 'Shoulder'];
 const imagingImpressions = [
@@ -110,6 +139,63 @@ const labTestsMetadata = {
   'Liver function': { unit: 'U/L', range: '7-56 U/L', normalMin: 7, normalMax: 56 },
 };
 
+const cohortDiagnosisCatalog = {
+  healthy_low_util: [
+    'Seasonal allergy',
+    'Gastroenteritis',
+    'Chronic back pain',
+    'Tension headache',
+    'Dermatitis',
+  ],
+  chronic_htn_dm: [
+    'Hypertension',
+    'Type 2 diabetes',
+    'Hyperlipidemia',
+    'Coronary artery disease',
+  ],
+  lab_worsening: [
+    'Type 2 diabetes',
+    'Prediabetes',
+    'Chronic kidney disease',
+    'Hypertension',
+  ],
+  adherence_gap: [
+    'Hypertension',
+    'Type 2 diabetes',
+    'Depression',
+    'Anxiety',
+  ],
+  vaccination_overdue: [
+    'Upper respiratory infection',
+    'Preventive care follow-up',
+    'Seasonal allergy',
+    'Asthma',
+  ],
+  no_show: [
+    'Anxiety',
+    'Depression',
+    'Asthma',
+    'Chronic back pain',
+  ],
+  readmission_pattern: [
+    'Heart failure',
+    'Pneumonia',
+    'Chronic kidney disease',
+    'COPD exacerbation',
+  ],
+  high_util: [
+    'Kidney disease',
+    'Cancer surveillance',
+    'Asthma',
+    'Hypertension',
+    'Depression',
+  ],
+  risk_tier_high: [
+    'Hypertension',
+    'Type 2 diabetes',
+  ],
+};
+
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function rand() {
@@ -121,21 +207,102 @@ function mulberry32(seed) {
   };
 }
 
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/pms');
-    console.log('Connected to MongoDB');
-  } catch (error) {
-    console.error('DB connection error:', error);
-    process.exit(1);
-  }
-};
-
 function getLabStatus(value, meta) {
   if (meta.normalMin === 0 && meta.normalMax === 0) return 'Normal';
   if (value < meta.normalMin * 0.9 || value > meta.normalMax * 1.25) return 'Critical';
   if (value < meta.normalMin || value > meta.normalMax) return 'Abnormal';
   return 'Normal';
+}
+
+function escapeCsv(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function parseFlag(argv, flag) {
+  return argv.includes(flag);
+}
+
+function parseOption(argv, name) {
+  const prefix = `--${name}=`;
+  const match = argv.find((arg) => arg.startsWith(prefix));
+  return match ? match.slice(prefix.length) : undefined;
+}
+
+function normalizeExportPath(exportPath) {
+  const target = exportPath || DEFAULT_CREDENTIALS_EXPORT;
+  return path.isAbsolute(target) ? target : path.join(process.cwd(), target);
+}
+
+function assertSeedingAllowed(options = {}) {
+  const envName = String(process.env.NODE_ENV || '').toLowerCase();
+  const allowProduction =
+    options.allowProduction === true || String(process.env.SEED_ALLOW_PRODUCTION || '').toLowerCase() === 'true';
+
+  if (envName === 'production' && !allowProduction) {
+    throw new Error(
+      'Refusing to run seed workflow while NODE_ENV=production. Use a non-production environment or set SEED_ALLOW_PRODUCTION=true only if you are absolutely sure.'
+    );
+  }
+
+  if (!process.env.MONGO_URI) {
+    throw new Error('MONGO_URI is required before running the seed workflow.');
+  }
+}
+
+function buildInsuranceForPatient(index, rnd) {
+  const provider = INSURANCE_PROVIDERS[index % INSURANCE_PROVIDERS.length];
+  const coverageOptions = [50, 60, 70, 75, 80, 85, 90, 95, 100];
+  return {
+    provider: provider.name,
+    coverage_percentage: coverageOptions[Math.floor(rnd() * coverageOptions.length)],
+    policy_number: `${provider.planCode}-POL-${String(index + 1).padStart(5, '0')}`,
+    group_number: `${provider.planCode}-GRP-${String((index % 24) + 1).padStart(3, '0')}`,
+  };
+}
+
+function buildInvoiceInsuranceVariable(patient) {
+  return {
+    insurance: {
+      provider: patient.insurance?.provider || '',
+      coverage_percentage: patient.insurance?.coverage_percentage ?? 0,
+      policy_number: patient.insurance?.policy_number || '',
+      group_number: patient.insurance?.group_number || '',
+    },
+  };
+}
+
+function buildDeterministicPassword(seedNum, sequence) {
+  return `${process.env.SEED_PASSWORD_PREFIX || DEFAULT_PASSWORD_PREFIX}${String(seedNum).padStart(3, '0')}-${String(sequence).padStart(4, '0')}`;
+}
+
+function buildPatientUser(patient, sequence, seedNum) {
+  const plaintextPassword = buildDeterministicPassword(seedNum, sequence);
+  return {
+    user: {
+      email: patient.email_address,
+      password_hash: bcrypt.hashSync(plaintextPassword, 8),
+      role: 'patient',
+      patient_id: patient.patient_id,
+      fullName: `${patient.first_name} ${patient.last_name}`.trim(),
+      is_active: true,
+    },
+    credentialRow: {
+      patient_id: patient.patient_id,
+      email: patient.email_address,
+      password: plaintextPassword,
+      full_name: `${patient.first_name} ${patient.last_name}`.trim(),
+      insurance_provider: patient.insurance?.provider || '',
+    },
+  };
+}
+
+function writeCredentialExport(rows, exportPath) {
+  fs.mkdirSync(path.dirname(exportPath), { recursive: true });
+  const csvRows = [
+    ['patient_id', 'email', 'plaintext_password', 'full_name', 'insurance_provider'],
+    ...rows.map((row) => [row.patient_id, row.email, row.password, row.full_name, row.insurance_provider]),
+  ];
+  fs.writeFileSync(`${exportPath}`, `${csvRows.map((row) => row.map(escapeCsv).join(',')).join('\n')}\n`, 'utf8');
 }
 
 function medicineByName(medicines, name) {
@@ -211,6 +378,56 @@ function pick(rnd, arr) {
   return arr[Math.floor(rnd() * arr.length)];
 }
 
+function buildLifestyleForPatient({ cohort, age, rnd }) {
+  let candidates = lifestyleProfiles;
+
+  if (cohort === 'chronic_htn_dm' || cohort === 'lab_worsening') {
+    candidates = lifestyleProfiles.filter((item) =>
+      ['Diabetic diet', 'High sodium diet', 'Low carb diet', 'Balanced diet'].includes(item.diet)
+    );
+  } else if (cohort === 'healthy_low_util') {
+    candidates = lifestyleProfiles.filter((item) =>
+      !item.smoking && ['Moderate exercise', 'Active lifestyle', 'Daily walking', 'Light exercise'].includes(item.physical_activity)
+    );
+  } else if (cohort === 'high_util' || cohort === 'readmission_pattern') {
+    candidates = lifestyleProfiles.filter((item) =>
+      ['Sedentary', 'Occasional exercise', 'Light exercise'].includes(item.physical_activity)
+    );
+  } else if (cohort === 'adherence_gap' || cohort === 'no_show') {
+    candidates = lifestyleProfiles.filter((item) =>
+      ['Sedentary', 'Occasional exercise', 'Light exercise', 'Daily walking'].includes(item.physical_activity)
+    );
+  }
+
+  if (age >= 65) {
+    candidates = candidates.filter((item) => item.physical_activity !== 'Active lifestyle');
+  }
+
+  if (!candidates.length) candidates = lifestyleProfiles;
+
+  const selected = { ...pick(rnd, candidates) };
+
+  if (cohort === 'risk_tier_high') {
+    selected.smoking = rnd() < 0.45;
+    selected.alcohol = rnd() < 0.55;
+    selected.diet = pick(rnd, ['High sodium diet', 'High sugar intake', 'Frequent fast food intake', 'Diabetic diet']);
+    selected.physical_activity = pick(rnd, ['Sedentary', 'Occasional exercise', 'Light exercise']);
+  }
+
+  return selected;
+}
+
+function diagnosisForCohort(cohort, rnd) {
+  const diagnoses = cohortDiagnosisCatalog[cohort] || cohortDiagnosisCatalog.healthy_low_util;
+  return pick(rnd, diagnoses);
+}
+
+function applyConditionCategories(records) {
+  for (const record of records) {
+    record.condition_category = categorizeCondition(record);
+  }
+}
+
 function pickAppointmentStatusForCohort(cohort, rnd, isStrongNoShow) {
   if (cohort === 'no_show' && isStrongNoShow) {
     const r = rnd();
@@ -233,15 +450,33 @@ function visitProfileForCohort(cohort, aptDate, windowEnd, rnd, recentCutoff) {
     visitType = pick(rnd, ['Annual Physical', 'Consultation', 'Follow-up']);
   }
 
-  let diagnosis = pick(rnd, ['Seasonal allergy', 'Upper respiratory infection', 'Gastroenteritis', 'Chronic back pain', 'Anxiety']);
+  let diagnosis = diagnosisForCohort(cohort, rnd);
   let assessmentSuffix = pick(rnd, visitTreatments);
   let systolic;
   let diastolic = String(65 + Math.floor(rnd() * 18));
 
   if (cohort === 'chronic_htn_dm' || cohort === 'lab_worsening') {
-    diagnosis = rnd() < 0.55 ? 'Hypertension' : 'Type 2 diabetes';
+    diagnosis = diagnosisForCohort(cohort, rnd);
     assessmentSuffix = pick(rnd, visitTreatments);
     systolic = rnd() < 0.65 ? String(135 + Math.floor(rnd() * 35)) : String(118 + Math.floor(rnd() * 20));
+  } else if (cohort === 'readmission_pattern') {
+    diagnosis = diagnosisForCohort(cohort, rnd);
+    assessmentSuffix = pick(rnd, [
+      'Close monitoring and repeat evaluation',
+      'Medication adjustment and symptom surveillance',
+      'Pulmonary support and follow-up',
+      'Renal monitoring and fluid management',
+    ]);
+    systolic = String(118 + Math.floor(rnd() * 32));
+  } else if (cohort === 'high_util') {
+    diagnosis = diagnosisForCohort(cohort, rnd);
+    assessmentSuffix = pick(rnd, [
+      'Multidisciplinary follow-up arranged',
+      'Medication review and specialist coordination',
+      'Ongoing symptom monitoring advised',
+      'Supportive counseling and repeat assessment',
+    ]);
+    systolic = String(112 + Math.floor(rnd() * 34));
   } else {
     systolic = String(105 + Math.floor(rnd() * 28));
   }
@@ -852,6 +1087,7 @@ function generatePatientBundle({
       patient_id: patient.patient_id,
       patient_name: `${patient.first_name} ${patient.last_name}`,
       items,
+      variable: buildInvoiceInsuranceVariable(patient),
       total_amount: totalAmount,
       invoice_date: invDate,
       status: pick(rnd, ['pending', 'paid', 'paid', 'cancelled']),
@@ -875,6 +1111,7 @@ function generatePatientBundle({
           totalPrice: 60 * Number(metformin.price || 0),
         },
       ],
+      variable: buildInvoiceInsuranceVariable(patient),
       total_amount: 60 * Number(metformin.price || 0),
       invoice_date: fillDate,
       status: 'paid',
@@ -900,21 +1137,67 @@ function finalizePatientStats(patients, records) {
   }
 }
 
+function assignPatientRelationshipRefs(patients, appointments, records, invoices) {
+  const appointmentMap = new Map();
+  const invoiceMap = new Map();
+  const recordMap = new Map();
+
+  for (const appointment of appointments) {
+    if (!appointmentMap.has(appointment.patient_id)) appointmentMap.set(appointment.patient_id, []);
+    appointmentMap.get(appointment.patient_id).push(appointment.appointment_id);
+  }
+
+  for (const invoice of invoices) {
+    if (!invoiceMap.has(invoice.patient_id)) invoiceMap.set(invoice.patient_id, []);
+    invoiceMap.get(invoice.patient_id).push(invoice.invoice_id);
+  }
+
+  for (const record of records) {
+    if (!recordMap.has(record.patient_id)) recordMap.set(record.patient_id, []);
+    recordMap.get(record.patient_id).push(record.record_id);
+  }
+
+  for (const patient of patients) {
+    patient.appointment_refs = appointmentMap.get(patient.patient_id) || [];
+    patient.billing_refs = invoiceMap.get(patient.patient_id) || [];
+    patient.medical_history_ref = (recordMap.get(patient.patient_id) || [])[0] || '';
+  }
+}
+
+async function clearSeedData({ exportPath }) {
+  console.log('Resetting existing patient workflow seed data...');
+  await PatientRiskProfile.deleteMany({});
+  await CareAlert.deleteMany({});
+  await LabTrend.deleteMany({});
+  await AdherenceRecord.deleteMany({});
+  await PrescriptionInvoice.deleteMany({});
+  await HealthRecord.deleteMany({});
+  await Appointment.deleteMany({});
+  await User.deleteMany({ role: 'patient' });
+  await Patient.deleteMany({});
+
+  if (exportPath && fs.existsSync(exportPath)) {
+    fs.unlinkSync(exportPath);
+    console.log(`Removed previous credential export: ${exportPath}`);
+  }
+}
+
 const seedDatabase = async (opts = {}) => {
-  const patientCount = Math.max(
-    8,
-    parseInt(opts.patientCount ?? process.env.SEED_PATIENT_COUNT ?? '60', 10) || 60
-  );
+  const patientCount = Math.max(8, parseInt(opts.patientCount ?? process.env.SEED_PATIENT_COUNT ?? '60', 10) || 60);
   const seedNum = parseInt(opts.seed ?? process.env.SEED_RANDOM_SEED ?? '42', 10) || 42;
-  const windowMonths = Math.max(
-    6,
-    parseInt(opts.windowMonths ?? process.env.SEED_WINDOW_MONTHS ?? '20', 10) || 20
-  );
-  const runPredictive = String(opts.runPredictive ?? process.env.SEED_RUN_PREDICTIVE ?? 'true').toLowerCase() !== 'false';
+  const windowMonths = Math.max(6, parseInt(opts.windowMonths ?? process.env.SEED_WINDOW_MONTHS ?? '20', 10) || 20);
+  const runPredictive =
+    String(opts.runPredictive ?? process.env.SEED_RUN_PREDICTIVE ?? 'false').toLowerCase() === 'true';
+  const resetOnly = opts.resetOnly === true;
+  const exportPath = normalizeExportPath(opts.exportPath ?? process.env.SEED_CREDENTIALS_EXPORT);
+
+  assertSeedingAllowed(opts);
 
   const rnd = mulberry32(seedNum);
   const windowEnd = dayjs().subtract(1, 'day').endOf('day');
   const windowStart = windowEnd.subtract(windowMonths, 'month').startOf('day');
+  const highRiskCount = Math.max(0, parseInt(opts.highRiskCount ?? process.env.SEED_HIGH_RISK_COUNT ?? '4', 10) || 0);
+  const tierHighPatients = Math.min(highRiskCount, patientCount);
 
   const samplePrescriptionPath = path.join(__dirname, '..', 'sample-prescription');
   const medicines = JSON.parse(fs.readFileSync(samplePrescriptionPath, 'utf8'));
@@ -923,24 +1206,33 @@ const seedDatabase = async (opts = {}) => {
   const makeRecordId = createIdFactory('REC');
   const makeInvoiceId = createIdFactory('INV');
 
-  try {
-    console.log('Clearing existing test data...');
-    await Patient.deleteMany({});
-    await Appointment.deleteMany({});
-    await HealthRecord.deleteMany({});
-    await PrescriptionInvoice.deleteMany({});
-    await PatientRiskProfile.deleteMany({});
-    await CareAlert.deleteMany({});
-    await LabTrend.deleteMany({});
-    await AdherenceRecord.deleteMany({});
+  const chunk = async (model, docs, label, size = 800) => {
+    for (let i = 0; i < docs.length; i += size) {
+      const slice = docs.slice(i, i + size);
+      await model.insertMany(slice);
+    }
+    console.log(`Inserted ${docs.length} ${label}`);
+  };
 
-    const highRiskCount = Math.max(0, parseInt(process.env.SEED_HIGH_RISK_COUNT || '4', 10) || 0);
-    const tierHighPatients = Math.min(highRiskCount, patientCount);
+  try {
+    await clearSeedData({ exportPath });
+
+    if (resetOnly) {
+      console.log('Seed reset completed. No new test data inserted.');
+      return {
+        resetOnly: true,
+        exportPath,
+      };
+    }
+
     console.log(
-      `Generating cohort data (${patientCount} patients, seed=${seedNum}, window=${windowMonths}mo, risk_tier_high=${tierHighPatients})...`
+      `Generating unified patient workflow seed (${patientCount} patients, seed=${seedNum}, window=${windowMonths}mo, risk_tier_high=${tierHighPatients})...`
     );
+    console.log(`Prepared ${INSURANCE_PROVIDERS.length} insurance providers for embedded patient insurance.`);
 
     const patients = [];
+    const patientUsers = [];
+    const credentialRows = [];
     const allAppointments = [];
     const allRecords = [];
     const allInvoices = [];
@@ -948,6 +1240,7 @@ const seedDatabase = async (opts = {}) => {
     for (let i = 0; i < patientCount; i += 1) {
       let cohort = COHORT_CYCLE[i % COHORT_CYCLE.length];
       if (i < highRiskCount) cohort = 'risk_tier_high';
+
       const dob = windowStart.subtract(25 + Math.floor(rnd() * 50), 'year').subtract(Math.floor(rnd() * 300), 'day');
       const gRoll = rnd();
       const gender = gRoll < 0.48 ? 'Male' : gRoll < 0.96 ? 'Female' : 'Other';
@@ -967,9 +1260,19 @@ const seedDatabase = async (opts = {}) => {
         status: 'active',
         visit_count: 0,
         attending_physician: physicians[Math.floor(rnd() * physicians.length)],
-        created_by: 'admin',
+        insurance: buildInsuranceForPatient(i, rnd),
+        lifestyle: buildLifestyleForPatient({
+          cohort,
+          age: dayjs().diff(dob, 'year'),
+          rnd,
+        }),
+        created_by: 'seed-script',
       };
       patients.push(patient);
+
+      const { user, credentialRow } = buildPatientUser(patient, i + 1, seedNum);
+      patientUsers.push(user);
+      credentialRows.push(credentialRow);
 
       const bundle = generatePatientBundle({
         patient,
@@ -988,21 +1291,17 @@ const seedDatabase = async (opts = {}) => {
     }
 
     finalizePatientStats(patients, allRecords);
+    assignPatientRelationshipRefs(patients, allAppointments, allRecords, allInvoices);
+    applyConditionCategories(allRecords);
 
-    console.log(`Inserting ${patients.length} patients...`);
-    await Patient.insertMany(patients);
-
-    const chunk = async (model, docs, label, size = 800) => {
-      for (let i = 0; i < docs.length; i += size) {
-        const slice = docs.slice(i, i + size);
-        await model.insertMany(slice);
-      }
-      console.log(`Inserted ${docs.length} ${label}`);
-    };
-
+    await chunk(Patient, patients, 'patients');
+    await chunk(User, patientUsers, 'patient auth users');
     await chunk(Appointment, allAppointments, 'appointments');
     await chunk(HealthRecord, allRecords, 'health records');
     await chunk(PrescriptionInvoice, allInvoices, 'prescription invoices');
+
+    writeCredentialExport(credentialRows, exportPath);
+    console.log(`Wrote ${credentialRows.length} patient login credentials to ${exportPath}`);
 
     if (runPredictive) {
       console.log('Running predictive care orchestrator for all active patients...');
@@ -1010,24 +1309,76 @@ const seedDatabase = async (opts = {}) => {
       await computePredictiveCareForAllActivePatients();
       console.log('Predictive care computation finished.');
     } else {
-      console.log('Skipped predictive run (SEED_RUN_PREDICTIVE=false). Run: node scripts/batchComputeRiskProfiles.js');
+      console.log('Skipped predictive run (set SEED_RUN_PREDICTIVE=true or pass --predictive to include predictive enrichment).');
     }
 
-    console.log('Test data generation completed successfully.');
-  } catch (error) {
-    console.error('Error seeding database:', error);
-    process.exitCode = 1;
+    const sampleCredentials = credentialRows.slice(0, 5);
+    console.log('Sample patient logins:');
+    for (const row of sampleCredentials) {
+      console.log(`  ${row.email} / ${row.password} (${row.patient_id})`);
+    }
+
+    console.log('Unified test data generation completed successfully.');
+    return {
+      patientCount: patients.length,
+      userCount: patientUsers.length,
+      appointmentCount: allAppointments.length,
+      healthRecordCount: allRecords.length,
+      invoiceCount: allInvoices.length,
+      insuranceProviderCount: INSURANCE_PROVIDERS.length,
+      exportPath,
+      sampleCredentials,
+    };
   } finally {
     await mongoose.connection.close();
     console.log('Database connection closed');
   }
 };
 
-module.exports = { seedDatabase, connectDB };
+async function runFromCli(argv = process.argv.slice(2)) {
+  const options = {
+    patientCount: parseOption(argv, 'patient-count'),
+    seed: parseOption(argv, 'seed'),
+    windowMonths: parseOption(argv, 'window-months'),
+    exportPath: parseOption(argv, 'export'),
+    highRiskCount: parseOption(argv, 'high-risk-count'),
+    runPredictive: parseFlag(argv, '--predictive') ? 'true' : parseFlag(argv, '--no-predictive') ? 'false' : undefined,
+    resetOnly: parseFlag(argv, '--reset-only'),
+    allowProduction: parseFlag(argv, '--allow-production'),
+  };
+
+  if (parseFlag(argv, '--help')) {
+    console.log(`
+Unified patient workflow seed
+
+Usage:
+  node scripts/seedTestData.js
+  node scripts/seedTestData.js --predictive
+  node scripts/seedTestData.js --reset-only
+  node scripts/seedTestData.js --patient-count=80 --seed=42 --window-months=20
+
+Options:
+  --predictive         Run predictive enrichment after seeding
+  --no-predictive      Explicitly skip predictive enrichment
+  --reset-only         Delete seeded workflow data without inserting replacement data
+  --patient-count=N    Number of patients to create
+  --seed=N             Deterministic random seed
+  --window-months=N    Historical data window in months
+  --high-risk-count=N  Number of guaranteed high-risk patients
+  --export=PATH        Credential CSV export path
+  --allow-production   Override production environment safety check
+`);
+    return;
+  }
+
+  await connectDB();
+  await seedDatabase(options);
+}
+
+module.exports = { seedDatabase, connectDB, runFromCli };
 
 if (require.main === module) {
-  // CLI invocation: connect then run with env-driven options
-  connectDB().then(() => seedDatabase()).catch((err) => {
+  runFromCli().catch((err) => {
     console.error('Seeding failed:', err);
     process.exit(1);
   });

@@ -3,6 +3,7 @@ const invoiceService = require('../prescription-invoices/prescriptionInvoice.ser
 const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
 const { normalizeHealthRecordDetails } = require('./healthRecord.normalize');
+const { categorizeCondition } = require('./conditionCategory.helper');
 
 const INVENTORY_CACHE_TTL = 60 * 1000;
 let prescriptionInventoryCache = { timestamp: 0, items: [] };
@@ -234,6 +235,11 @@ exports.createHealthRecord = async (data, actor) => {
     provider: data.provider,
     save_state: data.save_state || 'final',
     summary: data.summary || '',
+    condition_category: categorizeCondition({
+      record_type: data.record_type,
+      summary: data.summary || '',
+      details: normalizedDetails,
+    }),
     details: normalizedDetails,
     created_by: actor?.id,
   });
@@ -286,6 +292,11 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
       record.details = normalizeHealthRecordDetails(effectiveType, updates.details || {});
     }
   }
+  record.condition_category = categorizeCondition({
+    record_type: record.record_type,
+    summary: record.summary || '',
+    details: record.details || {},
+  });
   record.updated_by = actor?.id;
 
   await record.save();

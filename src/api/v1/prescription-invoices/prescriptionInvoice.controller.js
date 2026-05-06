@@ -14,7 +14,7 @@ exports.getPrescriptionInvoiceById = asyncHandler(async (req, res) => {
 
 exports.updatePrescriptionInvoiceStatus = asyncHandler(async (req, res) => {
   const actor = { id: req.apiKey?.createdBy, role: 'api_key', ip: req.ip };
-  const invoice = await service.updatePrescriptionInvoiceStatus(req.params.id, req.body.status, actor);
+  const invoice = await service.updatePrescriptionInvoiceStatus(req.params.id, req.body, actor);
   apiResponse.success(res, 200, { invoice });
 });
 

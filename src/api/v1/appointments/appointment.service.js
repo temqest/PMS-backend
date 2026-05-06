@@ -10,6 +10,23 @@ const buildScheduledAt = (date, time) => {
   return composed;
 };
 
+const formatLocalDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const formatLocalTime = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+};
+
 const makeAppointmentId = () => `APT-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
 exports.getAppointments = async (query = {}, actor = {}) => {
@@ -29,6 +46,23 @@ exports.getAppointments = async (query = {}, actor = {}) => {
     const end = new Date(`${query.date}T23:59:59.999`);
     if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
       filter.scheduled_at = { $gte: start, $lte: end };
+    }
+  } else if (query.start_date || query.end_date) {
+    const range = {};
+    if (query.start_date) {
+      const start = new Date(`${query.start_date}T00:00:00`);
+      if (!Number.isNaN(start.getTime())) {
+        range.$gte = start;
+      }
+    }
+    if (query.end_date) {
+      const end = new Date(`${query.end_date}T23:59:59.999`);
+      if (!Number.isNaN(end.getTime())) {
+        range.$lte = end;
+      }
+    }
+    if (Object.keys(range).length > 0) {
+      filter.scheduled_at = range;
     }
   }
   if (query.search) {
@@ -83,7 +117,7 @@ exports.createAppointment = async (data, actor) => {
   });
 
   await Patient.findOneAndUpdate(
-    { patient_id: data.patient_id },
+    { patient_id: patientId },
     { $addToSet: { appointment_refs: appointment.appointment_id }, $set: { updated_by: actor?.id } },
     { returnDocument: 'after' }
   );
@@ -121,8 +155,8 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
   }
 
   if (updates.date || updates.time) {
-    const date = updates.date || appointment.scheduled_at.toISOString().slice(0, 10);
-    const time = updates.time || appointment.scheduled_at.toISOString().slice(11, 16);
+    const date = updates.date || formatLocalDate(appointment.scheduled_at);
+    const time = updates.time || formatLocalTime(appointment.scheduled_at);
     const scheduledAt = buildScheduledAt(date, time);
     if (!scheduledAt) throw new AppError('Invalid date or time.', 422);
     appointment.scheduled_at = scheduledAt;

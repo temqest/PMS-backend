@@ -37,6 +37,12 @@ const patientSchema = new mongoose.Schema(
       policy_number: { type: String, trim: true, default: '' },
       group_number: { type: String, trim: true, default: '' },
     },
+    lifestyle: {
+      smoking: { type: Boolean, default: false },
+      alcohol: { type: Boolean, default: false },
+      diet: { type: String, trim: true, default: '' },
+      physical_activity: { type: String, trim: true, default: '' },
+    },
 
     created_by:  { type: String, required: true },
     updated_by:  { type: String },

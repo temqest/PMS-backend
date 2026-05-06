@@ -42,19 +42,30 @@ exports.getPrescriptionInvoiceById = async (invoiceId) => {
   return invoice;
 };
 
-exports.updatePrescriptionInvoiceStatus = async (invoiceId, status, actor) => {
-  const invoice = await PrescriptionInvoice.findOneAndUpdate(
-    { invoice_id: invoiceId },
-    {
-      $set: {
-        status,
-        updated_by: actor?.id,
-      },
-    },
-    { returnDocument: 'after', runValidators: true }
-  );
-
+exports.updatePrescriptionInvoiceStatus = async (invoiceId, updates, actor) => {
+  const invoice = await PrescriptionInvoice.findOne({ invoice_id: invoiceId });
   if (!invoice) throw new AppError('Prescription invoice not found.', 404);
+
+  const nextStatus = typeof updates.status === 'string' ? updates.status : invoice.status;
+  let nextIsReleased =
+    typeof updates.is_released === 'boolean' ? updates.is_released : invoice.is_released;
+
+  if (updates.status === 'paid') {
+    nextIsReleased = true;
+  }
+
+  if (nextIsReleased && nextStatus !== 'paid') {
+    throw new AppError('is_released can only be true when status is paid.', 422);
+  }
+
+  if (nextStatus !== 'paid') {
+    nextIsReleased = false;
+  }
+
+  invoice.status = nextStatus;
+  invoice.is_released = nextIsReleased;
+  invoice.updated_by = actor?.id;
+  await invoice.save();
 
   logger.info({
     event: 'PRESCRIPTION_INVOICE_STATUS_UPDATED',
@@ -63,6 +74,7 @@ exports.updatePrescriptionInvoiceStatus = async (invoiceId, status, actor) => {
     ip: actor?.ip,
     invoice_id: invoice.invoice_id,
     status: invoice.status,
+    is_released: invoice.is_released,
   });
 
   return invoice;

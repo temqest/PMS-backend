@@ -1,5 +1,12 @@
 const Joi = require('joi');
 
+const lifestyleSchema = Joi.object({
+  smoking: Joi.boolean().optional(),
+  alcohol: Joi.boolean().optional(),
+  diet: Joi.string().trim().optional().allow(null, ''),
+  physical_activity: Joi.string().trim().optional().allow(null, ''),
+}).optional().allow(null);
+
 const createPatientSchema = Joi.object({
   first_name: Joi.string().trim().required(),
   last_name: Joi.string().trim().required(),
@@ -35,6 +42,7 @@ const createPatientSchema = Joi.object({
   insurance_provider: Joi.string().trim().optional().allow(null, ''),
   policy_number: Joi.string().trim().optional().allow(null, ''),
   group_number: Joi.string().trim().optional().allow(null, ''),
+  lifestyle: lifestyleSchema,
   // Additional Notes (optional)
   notes: Joi.string().trim().optional().allow(null, ''),
   // `created_by` is supplied from the authenticated actor in the controller/service
@@ -75,6 +83,7 @@ const updatePatientSchema = Joi.object({
   insurance_provider: Joi.string().trim().optional().allow(null, ''),
   policy_number: Joi.string().trim().optional().allow(null, ''),
   group_number: Joi.string().trim().optional().allow(null, ''),
+  lifestyle: lifestyleSchema,
   // Additional Notes (optional)
   notes: Joi.string().trim().optional().allow(null, ''),
   updated_by: Joi.string().optional(),

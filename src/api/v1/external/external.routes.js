@@ -68,7 +68,7 @@ router.get('/invoices/:id', requirePermission('read:invoices'), prescriptionInvo
 
 /**
  * PATCH /api/v1/external/invoices/:id
- * Update only the status of a prescription invoice (API key authenticated)
+ * Patch status and/or release state of a prescription invoice (API key authenticated)
  */
 router.patch(
 	'/invoices/:id',
