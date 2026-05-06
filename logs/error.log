@@ -1,0 +1,1 @@
+{"level":"error","message":{"event":"PRESCRIPTION_INVENTORY_AUTH_MISSING","hasApiKey":false,"hasBearerToken":false,"url":"https://inventory.example.com/api/inventory"},"timestamp":"2026-05-06T13:26:08.131Z"}

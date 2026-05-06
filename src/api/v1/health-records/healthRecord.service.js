@@ -8,12 +8,33 @@ const { categorizeCondition } = require('./conditionCategory.helper');
 const INVENTORY_CACHE_TTL = 60 * 1000;
 let prescriptionInventoryCache = { timestamp: 0, items: [] };
 
+const getPrescriptionInventoryAuth = () => {
+  const apiKey = String(process.env.PRESCRIPTION_API_KEY || '').trim();
+  const bearerToken = String(process.env.PRESCRIPTION_API_BEARER_TOKEN || '').trim();
+
+  if (bearerToken) {
+    return {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+      mode: 'bearer',
+    };
+  }
+
+  if (apiKey) {
+    return {
+      headers: { 'x-api-key': apiKey },
+      mode: 'x-api-key',
+    };
+  }
+
+  return { headers: {}, mode: 'none' };
+};
+
 const fetchPrescriptionInventory = async () => {
-  const url = process.env.PRESCRIPTION_API_URL;
+  const url = String(process.env.PRESCRIPTION_API_URL || '').trim();
   if (!url) {
     throw new AppError('Prescription inventory URL is not configured.', 500);
   }
-  const apiKey = process.env.PRESCRIPTION_API_KEY;
+  const auth = getPrescriptionInventoryAuth();
 
   const now = Date.now();
   if (now - prescriptionInventoryCache.timestamp < INVENTORY_CACHE_TTL) {
@@ -25,13 +46,27 @@ const fetchPrescriptionInventory = async () => {
     throw new AppError('Server fetch API is unavailable. Please run on Node 18+ or install a fetch polyfill.', 500);
   }
 
-  const headers = { Accept: 'application/json' };
-  if (apiKey) {
-    headers['x-api-key'] = apiKey;
+  if (auth.mode === 'none') {
+    logger.error({
+      event: 'PRESCRIPTION_INVENTORY_AUTH_MISSING',
+      url,
+      hasApiKey: Boolean(String(process.env.PRESCRIPTION_API_KEY || '').trim()),
+      hasBearerToken: Boolean(String(process.env.PRESCRIPTION_API_BEARER_TOKEN || '').trim()),
+    });
+    throw new AppError('Prescription inventory authentication is not configured.', 500);
   }
+
+  const headers = { Accept: 'application/json', ...auth.headers };
   const response = await httpFetch(url, { headers });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
+    logger.error({
+      event: 'PRESCRIPTION_INVENTORY_FETCH_FAILED',
+      url,
+      status: response.status,
+      authMode: auth.mode,
+      responseBody: body.slice(0, 500),
+    });
     throw new AppError(`Failed to load prescription inventory: ${response.status} ${body}`, 502);
   }
 
@@ -313,6 +348,11 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
 };
 
 exports.getPrescriptionMedicines = async () => fetchPrescriptionInventory();
+
+exports.__private__ = {
+  fetchPrescriptionInventory,
+  getPrescriptionInventoryAuth,
+};
 
 exports.deleteHealthRecord = async (recordId, actor) => {
   const record = await HealthRecord.findOneAndUpdate(

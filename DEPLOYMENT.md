@@ -23,6 +23,8 @@ Required environment variables:
 - `ML_SERVICE_INTERNAL_URL=<optional private ML URL>`
 - `CORS_ALLOWED_ORIGINS=https://<your-frontend-domain>`
 - `PRESCRIPTION_API_URL=<inventory service url>`
+- `PRESCRIPTION_API_KEY=<optional external inventory API key>`
+- `PRESCRIPTION_API_BEARER_TOKEN=<optional external inventory bearer token>`
 
 ## ML service
 
@@ -48,16 +50,15 @@ Keep the trained `.joblib` files inside `machine_learning_backend/models/` in th
 Required environment variables:
 
 - `NEXT_PUBLIC_API_URL=https://<your-backend-domain>`
-- `PRESCRIPTION_API_URL=<inventory service url>`
-- `PRESCRIPTION_API_KEY=<optional>`
-- `PRESCRIPTION_API_BEARER_TOKEN=<optional>`
 
 ## Connection map
 
 - Frontend -> Backend: `NEXT_PUBLIC_API_URL`
 - Backend -> ML service: `ML_SERVICE_INTERNAL_URL` first, then `ML_SERVICE_URL`
 - Backend + ML service -> MongoDB: `MONGO_URI`
+- Backend -> External prescription inventory: `PRESCRIPTION_API_URL` plus `PRESCRIPTION_API_KEY` or `PRESCRIPTION_API_BEARER_TOKEN`
 - Frontend never calls the ML service directly
+- Frontend should not store the external prescription inventory credentials when using the backend proxy
 
 ## Post-deploy checks
 

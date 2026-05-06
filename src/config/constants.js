@@ -10,7 +10,21 @@ const ROLES = {
 };
 
 const PERMISSIONS = {
-  system_admin: ['register', 'view', 'update', 'soft_delete', 'analytics'],
+  system_admin: [
+    'register',
+    'view',
+    'view:limited',
+    'view:anonymized',
+    'view:own',
+    'create:own',
+    'update',
+    'update:medical',
+    'update:emr_ref',
+    'update:appointment_ref',
+    'update:own',
+    'soft_delete',
+    'analytics',
+  ],
   front_desk: ['register', 'view', 'update'],
   physician: ['view', 'update:medical'],
   billing_system: ['view:limited'],

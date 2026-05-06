@@ -2,12 +2,13 @@ const asyncHandler = require('../../../../utils/asyncHandler');
 const apiResponse = require('../../../../utils/apiResponse');
 const AppError = require('../../../../utils/AppError');
 const CareAlert = require('../models/careAlert.model');
+const { isPatientActor, patientScopedFilter } = require('../predictiveCare.access');
 
 exports.getAlerts = asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 20;
   const page = parseInt(req.query.page, 10) || 1;
-  const filter = {};
-  if (req.query.patient_id) filter.patient_id = req.query.patient_id;
+  const filter = isPatientActor(req) ? patientScopedFilter(req) : {};
+  if (!isPatientActor(req) && req.query.patient_id) filter.patient_id = req.query.patient_id;
   if (req.query.alert_type) filter.alert_type = req.query.alert_type;
   if (req.query.severity) filter.severity = req.query.severity;
   if (req.query.is_resolved !== undefined)

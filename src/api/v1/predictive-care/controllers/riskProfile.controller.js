@@ -14,8 +14,13 @@ const {
   getMlServiceStatus,
 } = require('../services/mlPrediction.service');
 const { PREDICTIVE_CARE_DISCLAIMER } = require('../../../../config/predictiveCare');
+const {
+  ensurePatientOwnsParam,
+  rejectPatientAccess,
+} = require('../predictiveCare.access');
 
 exports.getPatientRiskProfile = asyncHandler(async (req, res) => {
+  ensurePatientOwnsParam(req);
   const profile = await PatientRiskProfile.findOne({ patient_id: req.params.patientId });
   if (!profile) {
     throw new AppError('Risk profile not yet computed for this patient.', 404);
@@ -27,6 +32,7 @@ exports.getPatientRiskProfile = asyncHandler(async (req, res) => {
 });
 
 exports.getAllRiskProfiles = asyncHandler(async (req, res) => {
+  rejectPatientAccess(req);
   const limit = parseInt(req.query.limit, 10) || 20;
   const page = parseInt(req.query.page, 10) || 1;
   const { risk_level: riskLevel } = req.query;
@@ -75,11 +81,13 @@ exports.retrainModels = asyncHandler(async (req, res) => {
 });
 
 exports.mlStatus = asyncHandler(async (req, res) => {
+  rejectPatientAccess(req);
   const status = await getMlServiceStatus();
   apiResponse.success(res, 200, status);
 });
 
 exports.labForecast = asyncHandler(async (req, res) => {
+  ensurePatientOwnsParam(req);
   const { test_name: testName, last_values: lastValues } = req.query;
   const parsed = lastValues ? String(lastValues).split(',').map(Number) : [];
 
