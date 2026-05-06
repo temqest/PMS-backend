@@ -507,3 +507,11 @@
 {"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":50},"timestamp":"2026-05-06T06:22:46.859Z"}
 {"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":60},"timestamp":"2026-05-06T06:22:48.808Z"}
 {"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":60},"timestamp":"2026-05-06T06:22:49.039Z"}
+{"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":61},"timestamp":"2026-05-06T07:18:07.955Z"}
+{"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":61},"timestamp":"2026-05-06T07:18:08.666Z"}
+{"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":61},"timestamp":"2026-05-06T07:19:58.301Z"}
+{"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":50},"timestamp":"2026-05-06T07:21:18.739Z"}
+{"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":50},"timestamp":"2026-05-06T07:21:19.332Z"}
+{"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":61},"timestamp":"2026-05-06T07:21:21.159Z"}
+{"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":61},"timestamp":"2026-05-06T07:21:23.179Z"}
+{"level":"info","message":{"actor_id":"69fa3f035210a3c8091cb4a0","actor_role":"system_admin","event":"PATIENT_LISTED","ip":"::1","results":61},"timestamp":"2026-05-06T07:21:24.029Z"}

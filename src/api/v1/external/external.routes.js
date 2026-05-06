@@ -10,6 +10,7 @@ const { validate } = require('../../../middleware/validate.middleware');
 const { updatePrescriptionInvoiceStatusSchema } = require('../prescription-invoices/prescriptionInvoice.validation');
 const patientService = require('../patients/patient.service');
 const healthRecordService = require('../health-records/healthRecord.service');
+const appointmentService = require('../appointments/appointment.service');
 const rateLimiter = require('../../../middleware/rateLimiter');
 
 /**
@@ -138,6 +139,47 @@ router.get(
 	asyncHandler(async (req, res) => {
 		const record = await healthRecordService.getHealthRecordById(req.params.id);
 		apiResponse.success(res, 200, { record });
+	})
+);
+
+/**
+ * GET /api/v1/external/appointments
+ * Get all appointments (API key authenticated)
+ */
+router.get(
+	'/appointments',
+	requirePermission('read:appointments'),
+	asyncHandler(async (req, res) => {
+		const actor = { id: req.apiKey?.createdBy, role: ROLES.SYSTEM_ADMIN, ip: req.ip };
+		const result = await appointmentService.getAppointments(req.query, actor);
+		apiResponse.success(
+			res,
+			200,
+			{ appointments: result.appointments },
+			{ results: result.results, pagination: result.pagination }
+		);
+	})
+);
+
+/**
+ * GET /api/v1/external/patients/:id/appointments
+ * Get appointments for a specific patient (API key authenticated)
+ */
+router.get(
+	'/patients/:id/appointments',
+	requirePermission('read:appointments'),
+	asyncHandler(async (req, res) => {
+		const actor = { id: req.apiKey?.createdBy, role: ROLES.SYSTEM_ADMIN, ip: req.ip };
+		const result = await appointmentService.getAppointments(
+			{ ...req.query, patient_id: req.params.id },
+			actor
+		);
+		apiResponse.success(
+			res,
+			200,
+			{ appointments: result.appointments },
+			{ results: result.results, pagination: result.pagination }
+		);
 	})
 );
 
