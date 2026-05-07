@@ -3,12 +3,14 @@ const service = require('./prescriptionInvoice.service');
 const apiResponse = require('../../../utils/apiResponse');
 
 exports.getPrescriptionInvoices = asyncHandler(async (req, res) => {
-  const result = await service.getPrescriptionInvoices(req.query);
+  const actor = { id: req.user?.sub, role: req.user?.role, patient_id: req.user?.patient_id, ip: req.ip };
+  const result = await service.getPrescriptionInvoices(req.query, actor);
   apiResponse.success(res, 200, { invoices: result.invoices }, { results: result.results, pagination: result.pagination });
 });
 
 exports.getPrescriptionInvoiceById = asyncHandler(async (req, res) => {
-  const invoice = await service.getPrescriptionInvoiceById(req.params.id);
+  const actor = { id: req.user?.sub, role: req.user?.role, patient_id: req.user?.patient_id, ip: req.ip };
+  const invoice = await service.getPrescriptionInvoiceById(req.params.id, actor);
   apiResponse.success(res, 200, { invoice });
 });
 

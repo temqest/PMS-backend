@@ -46,6 +46,7 @@ const run = async () => {
   let updated = 0;
   let skipped = 0;
   let skippedNoEmail = 0;
+  let manualReview = 0;
 
   for (const patient of patients) {
     const email = String(patient.email_address || '').trim().toLowerCase();
@@ -56,6 +57,12 @@ const run = async () => {
     }
 
     const existing = await User.findOne({ email }).select('+password_hash');
+    if (existing && existing.patient_id && existing.patient_id !== patient.patient_id) {
+      manualReview += 1;
+      rows.push([patient.patient_id, email, '', `manual_review_existing_user_points_to_${existing.patient_id}`]);
+      continue;
+    }
+
     if (existing && !opts.resetPasswords) {
       skipped += 1;
       rows.push([patient.patient_id, email, '', 'existing_skipped']);
@@ -92,7 +99,7 @@ const run = async () => {
   const csv = rows.map((row) => row.map(escapeCsv).join(',')).join('\n');
   fs.writeFileSync(absoluteOutput, `${csv}\n`, 'utf8');
 
-  console.log(`Done. created=${created}, updated=${updated}, skipped=${skipped}, skipped_no_email=${skippedNoEmail}`);
+  console.log(`Done. created=${created}, updated=${updated}, skipped=${skipped}, skipped_no_email=${skippedNoEmail}, manual_review=${manualReview}`);
   console.log(`Credentials export written to: ${absoluteOutput}`);
   process.exit(0);
 };

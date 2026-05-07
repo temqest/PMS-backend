@@ -1,4 +1,7 @@
 const HealthRecord = require('./healthRecord.model');
+const Patient = require('../patients/patient.model');
+const Appointment = require('../appointments/appointment.model');
+const PrescriptionInvoice = require('../prescription-invoices/prescriptionInvoice.model');
 const invoiceService = require('../prescription-invoices/prescriptionInvoice.service');
 const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
@@ -103,6 +106,43 @@ const makeRecordId = () =>
   `REC-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
 const isInStock = (status = '') => status.trim().toUpperCase() === 'IN STOCK';
+
+const getCanonicalPatientName = (patient) =>
+  [patient?.first_name, patient?.last_name].filter(Boolean).join(' ').trim();
+
+const loadPatientOrThrow = async (patientId) => {
+  const patient = await Patient.findOne({ patient_id: patientId });
+  if (!patient) throw new AppError('Patient not found.', 404);
+  return patient;
+};
+
+const validateLinkedAppointment = async (details = {}, patientId) => {
+  const appointmentId = String(details?.appointmentId || '').trim();
+  if (!appointmentId) return;
+
+  const appointment = await Appointment.findOne({ appointment_id: appointmentId });
+  if (!appointment) {
+    throw new AppError('Linked appointment not found.', 422);
+  }
+  if (appointment.patient_id !== patientId) {
+    throw new AppError('Linked appointment belongs to a different patient_id.', 422);
+  }
+};
+
+const syncPrescriptionInvoicesForRecord = async (record, actor) => {
+  if (!record || record.record_type !== 'Prescription') return;
+
+  await PrescriptionInvoice.updateMany(
+    { health_record_id: record.record_id },
+    {
+      $set: {
+        patient_id: record.patient_id,
+        patient_name: record.patient_name,
+        updated_by: actor?.id,
+      },
+    }
+  );
+};
 
 const normalizePrescriptionRequest = (details = {}) => {
   const requestedMedicines = Array.isArray(details.medicines) ? details.medicines : [];
@@ -249,6 +289,10 @@ exports.getHealthRecordById = async (recordId, actor = {}) => {
 exports.createHealthRecord = async (data, actor) => {
   const recordDate = toDate(data.record_date);
   if (!recordDate) throw new AppError('Invalid record_date.', 422);
+  if (!data.patient_id) throw new AppError('patient_id is required.', 422);
+
+  const patient = await loadPatientOrThrow(data.patient_id);
+  const canonicalPatientName = getCanonicalPatientName(patient);
 
   let normalizedDetails =
     data.record_type === 'Prescription'
@@ -260,11 +304,12 @@ exports.createHealthRecord = async (data, actor) => {
   } else {
     normalizedDetails = normalizeHealthRecordDetails(data.record_type, normalizedDetails);
   }
+  await validateLinkedAppointment(normalizedDetails, patient.patient_id);
 
   const record = await HealthRecord.create({
     record_id: makeRecordId(),
-    patient_id: data.patient_id,
-    patient_name: data.patient_name,
+    patient_id: patient.patient_id,
+    patient_name: canonicalPatientName,
     record_type: data.record_type,
     record_date: recordDate,
     provider: data.provider,
@@ -315,7 +360,13 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
     record.record_date = nextDate;
   }
 
-  const assignable = ['patient_id', 'patient_name', 'record_type', 'provider', 'save_state', 'summary'];
+  const nextPatientId = typeof updates.patient_id !== 'undefined'
+    ? String(updates.patient_id || '').trim()
+    : record.patient_id;
+  if (!nextPatientId) throw new AppError('patient_id is required.', 422);
+  const nextPatient = await loadPatientOrThrow(nextPatientId);
+
+  const assignable = ['patient_id', 'record_type', 'provider', 'save_state', 'summary'];
   assignable.forEach((key) => {
     if (typeof updates[key] !== 'undefined') record[key] = updates[key];
   });
@@ -327,6 +378,9 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
       record.details = normalizeHealthRecordDetails(effectiveType, updates.details || {});
     }
   }
+  await validateLinkedAppointment(record.details || {}, nextPatient.patient_id);
+  record.patient_id = nextPatient.patient_id;
+  record.patient_name = getCanonicalPatientName(nextPatient);
   record.condition_category = categorizeCondition({
     record_type: record.record_type,
     summary: record.summary || '',
@@ -335,6 +389,7 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
   record.updated_by = actor?.id;
 
   await record.save();
+  await syncPrescriptionInvoicesForRecord(record, actor);
 
   logger.info({
     event: 'HEALTH_RECORD_UPDATED',

@@ -49,7 +49,11 @@ exports.findByEmail = async (email) => {
 exports.register = async ({ email, password, fullName, first_name, last_name, date_of_birth, gender, contact_number, address, national_id }) => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   const passwordHash = bcrypt.hashSync(password, 8);
-  const patient = await Patient.findOne({ email_address: normalizedEmail });
+  const matchingPatients = await Patient.find({ email_address: normalizedEmail }).limit(2);
+  if (matchingPatients.length > 1) {
+    throw new AppError('Multiple patient profiles share this email address. Manual review is required before creating a user account.', 409);
+  }
+  const patient = matchingPatients[0] || null;
 
   let patientRecord = patient;
   if (!patientRecord) {

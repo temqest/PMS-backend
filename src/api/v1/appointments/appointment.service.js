@@ -29,6 +29,15 @@ const formatLocalTime = (value) => {
 
 const makeAppointmentId = () => `APT-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
+const getCanonicalPatientName = (patient) =>
+  [patient?.first_name, patient?.last_name].filter(Boolean).join(' ').trim();
+
+const loadPatientOrThrow = async (patientId) => {
+  const patient = await Patient.findOne({ patient_id: patientId });
+  if (!patient) throw new AppError('Patient not found.', 404);
+  return patient;
+};
+
 exports.getAppointments = async (query = {}, actor = {}) => {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
   const limit = Math.max(1, parseInt(query.limit, 10) || 20);
@@ -92,12 +101,8 @@ exports.createAppointment = async (data, actor) => {
     throw new AppError('patient_id is required.', 422);
   }
 
-  let patientName = data.patient_name || '';
-  if (isPatient) {
-    const patient = await Patient.findOne({ patient_id: patientId });
-    if (!patient) throw new AppError('Patient not found.', 404);
-    patientName = `${patient.first_name} ${patient.last_name}`.trim();
-  }
+  const patient = await loadPatientOrThrow(patientId);
+  const patientName = getCanonicalPatientName(patient);
 
   const appointment = await Appointment.create({
     appointment_id: makeAppointmentId(),
@@ -162,11 +167,22 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
     appointment.scheduled_at = scheduledAt;
   }
 
+  const nextPatientId = actor?.role === 'patient'
+    ? appointment.patient_id
+    : (typeof updates.patient_id !== 'undefined' ? String(updates.patient_id || '').trim() : appointment.patient_id);
+
+  if (!nextPatientId) {
+    throw new AppError('patient_id is required.', 422);
+  }
+
+  const nextPatient = await loadPatientOrThrow(nextPatientId);
+  const nextPatientName = getCanonicalPatientName(nextPatient);
+  const previousPatientId = appointment.patient_id;
+
   const assignable = actor?.role === 'patient'
     ? ['appointment_type', 'duration_minutes', 'reason', 'priority', 'send_email_reminder', 'send_sms_reminder', 'send_confirmation']
     : [
     'patient_id',
-    'patient_name',
     'appointment_type',
     'duration_minutes',
     'reason',
@@ -180,6 +196,8 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
   assignable.forEach((key) => {
     if (typeof updates[key] !== 'undefined') appointment[key] = updates[key];
   });
+  appointment.patient_id = nextPatientId;
+  appointment.patient_name = nextPatientName;
   if (actor?.role === 'patient') {
     appointment.status = 'Pending';
     appointment.internal_notes = appointment.internal_notes || '';
@@ -187,6 +205,17 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
   appointment.updated_by = actor?.id;
 
   await appointment.save();
+
+  if (previousPatientId !== nextPatientId) {
+    await Patient.findOneAndUpdate(
+      { patient_id: previousPatientId },
+      { $pull: { appointment_refs: appointment.appointment_id }, $set: { updated_by: actor?.id } }
+    );
+    await Patient.findOneAndUpdate(
+      { patient_id: nextPatientId },
+      { $addToSet: { appointment_refs: appointment.appointment_id }, $set: { updated_by: actor?.id } }
+    );
+  }
 
   logger.info({
     event: 'APPOINTMENT_UPDATED',

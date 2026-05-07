@@ -81,6 +81,7 @@ exports.getMe = asyncHandler(async (req, res) => {
 
   const user = await authService.getCurrentUserById(String(userId));
   if (!user) throw new AppError('User not found', 404);
+  if (user.is_active === false) throw new AppError('Account is not active. Unauthorized.', 401);
 
   apiResponse.success(res, 200, { user });
 });

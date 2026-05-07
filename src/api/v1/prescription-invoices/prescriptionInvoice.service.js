@@ -9,13 +9,20 @@ const makeInvoiceId = () =>
 const getTotalAmount = (items = []) =>
   items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
 
-exports.getPrescriptionInvoices = async (query = {}) => {
+const getCanonicalPatientName = (patient) =>
+  [patient?.first_name, patient?.last_name].filter(Boolean).join(' ').trim();
+
+exports.getPrescriptionInvoices = async (query = {}, actor = {}) => {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
   const limit = Math.max(1, parseInt(query.limit, 10) || 20);
   const skip = (page - 1) * limit;
 
   const filter = {};
-  if (query.patient_id) filter.patient_id = query.patient_id;
+  if (actor.role === 'patient' && actor.patient_id) {
+    filter.patient_id = actor.patient_id;
+  } else if (query.patient_id) {
+    filter.patient_id = query.patient_id;
+  }
   if (query.health_record_id) filter.health_record_id = query.health_record_id;
   if (query.invoice_id) filter.invoice_id = query.invoice_id;
   if (query.status) filter.status = query.status;
@@ -36,9 +43,12 @@ exports.getPrescriptionInvoices = async (query = {}) => {
   };
 };
 
-exports.getPrescriptionInvoiceById = async (invoiceId) => {
+exports.getPrescriptionInvoiceById = async (invoiceId, actor = {}) => {
   const invoice = await PrescriptionInvoice.findOne({ invoice_id: invoiceId });
   if (!invoice) throw new AppError('Prescription invoice not found.', 404);
+  if (actor.role === 'patient' && actor.patient_id && invoice.patient_id !== actor.patient_id) {
+    throw new AppError('Forbidden: cannot access another patient invoice.', 403);
+  }
   return invoice;
 };
 
@@ -91,10 +101,20 @@ exports.createPrescriptionInvoice = async (data, actor) => {
     throw new AppError('Invoice total amount is invalid.', 422);
   }
 
+  const patientId = String(data.patient_id || '').trim();
+  if (!patientId) {
+    throw new AppError('patient_id is required.', 422);
+  }
+  const patient = await Patient.findOne({ patient_id: patientId });
+  if (!patient) {
+    throw new AppError('Patient not found.', 404);
+  }
+  const patientName = getCanonicalPatientName(patient);
+
   const invoice = await PrescriptionInvoice.create({
     invoice_id: makeInvoiceId(),
-    patient_id: data.patient_id,
-    patient_name: data.patient_name,
+    patient_id: patientId,
+    patient_name: patientName,
     health_record_id: data.health_record_id || '',
     items,
     prescription_names: items.map((item) => String(item.medicineName || '').trim()).filter(Boolean),
