@@ -18,6 +18,15 @@ services:
     autoDeploy: true
 
   - type: web
+    name: pms-telehealth-service
+    runtime: node
+    rootDir: telehealth_backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+
+  - type: web
     name: pms-frontend-web
     runtime: node
     rootDir: pms-frontend

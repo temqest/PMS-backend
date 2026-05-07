@@ -29,3 +29,12 @@ machine_learning_backend/.env
 machine_learning_backend/.env.*
 !machine_learning_backend/.env.example
 machine_learning_backend/models_archive/
+
+telehealth_backend/
+telehealth_backend/node_modules/
+telehealth_backend/.env
+telehealth_backend/.env.*
+!telehealth_backend/.env.example
+telehealth_backend/logs/
+telehealth_backend/dist/
+telehealth_backend/build/

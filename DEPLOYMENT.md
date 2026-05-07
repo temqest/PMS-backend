@@ -4,7 +4,8 @@
 
 1. Deploy `machine_learning_backend`
 2. Deploy backend API from the repository root
-3. Deploy `pms-frontend`
+3. Deploy `telehealth_backend`
+4. Deploy `pms-frontend`
 
 ## Backend
 
@@ -42,6 +43,20 @@ Required environment variables:
 
 Keep the trained `.joblib` files inside `machine_learning_backend/models/` in the deployable source unless you introduce a separate artifact storage step.
 
+## Telehealth service
+
+- Build command: `npm install`
+- Start command: `npm start`
+- Health check: `/health`
+
+Required environment variables:
+
+- `NODE_ENV=production`
+- `PORT=5100`
+- `JWT_SECRET=<same JWT secret as backend API>`
+- `MONGO_URI=<same MongoDB connection string as backend API>`
+- `FRONTEND_ORIGIN=https://<your-frontend-domain>`
+
 ## Frontend
 
 - Build command: `npm install && npm run build`
@@ -50,12 +65,15 @@ Keep the trained `.joblib` files inside `machine_learning_backend/models/` in th
 Required environment variables:
 
 - `NEXT_PUBLIC_API_URL=https://<your-backend-domain>`
+- `NEXT_PUBLIC_TELEHEALTH_URL=https://<your-telehealth-service-domain>`
 
 ## Connection map
 
 - Frontend -> Backend: `NEXT_PUBLIC_API_URL`
+- Frontend -> Telehealth service: `NEXT_PUBLIC_TELEHEALTH_URL`
 - Backend -> ML service: `ML_SERVICE_INTERNAL_URL` first, then `ML_SERVICE_URL`
 - Backend + ML service -> MongoDB: `MONGO_URI`
+- Telehealth service -> MongoDB: `MONGO_URI`
 - Backend -> External prescription inventory: `PRESCRIPTION_API_URL` plus `PRESCRIPTION_API_KEY` or `PRESCRIPTION_API_BEARER_TOKEN`
 - Frontend never calls the ML service directly
 - Frontend should not store the external prescription inventory credentials when using the backend proxy
@@ -65,5 +83,7 @@ Required environment variables:
 1. Open frontend and confirm login/signup hit the deployed backend.
 2. Confirm backend `/health` reports `status: ok`.
 3. Confirm ML `/health` reports `status: ok` and `model_dir_exists: true`.
-4. Compute a predictive-care profile and verify the response includes ML-backed fields when the ML service is reachable.
-5. Stop or misconfigure the ML URL temporarily and verify backend predictive endpoints fail safely instead of crashing the API.
+4. Confirm telehealth `/health` reports `status: ok`.
+5. Start a telehealth appointment from staff workspace and join it from the patient portal in a second browser/device.
+6. Compute a predictive-care profile and verify the response includes ML-backed fields when the ML service is reachable.
+7. Stop or misconfigure the ML URL temporarily and verify backend predictive endpoints fail safely instead of crashing the API.
