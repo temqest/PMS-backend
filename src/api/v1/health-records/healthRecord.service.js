@@ -7,6 +7,7 @@ const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
 const { normalizeHealthRecordDetails } = require('./healthRecord.normalize');
 const { categorizeCondition } = require('./conditionCategory.helper');
+const auditService = require('../audit-logs/auditLog.service');
 
 const INVENTORY_CACHE_TTL = 60 * 1000;
 let prescriptionInventoryCache = { timestamp: 0, items: [] };
@@ -109,6 +110,16 @@ const isInStock = (status = '') => status.trim().toUpperCase() === 'IN STOCK';
 
 const getCanonicalPatientName = (patient) =>
   [patient?.first_name, patient?.last_name].filter(Boolean).join(' ').trim();
+
+const getAuditRecordShape = (record) => {
+  const isPrescription = record?.record_type === 'Prescription';
+  return {
+    entityType: isPrescription ? 'prescription' : 'health_record',
+    createAction: isPrescription ? 'CREATE_PRESCRIPTION' : 'CREATE_HEALTH_RECORD',
+    updateAction: isPrescription ? 'UPDATE_PRESCRIPTION' : 'UPDATE_HEALTH_RECORD',
+    deleteAction: isPrescription ? 'DELETE_PRESCRIPTION' : 'DELETE_HEALTH_RECORD',
+  };
+};
 
 const loadPatientOrThrow = async (patientId) => {
   const patient = await Patient.findOne({ patient_id: patientId });
@@ -337,6 +348,17 @@ exports.createHealthRecord = async (data, actor) => {
     await invoiceService.createInvoiceForHealthRecord(record, actor);
   }
 
+  const auditShape = getAuditRecordShape(record);
+  await auditService.logAuditEvent({
+    actor,
+    action: auditShape.createAction,
+    entity_type: auditShape.entityType,
+    entity_id: record.record_id,
+    entity_name: record.patient_name,
+    description: `${record.record_type} record created.`,
+    new_value: record,
+  });
+
   return record;
 };
 
@@ -347,6 +369,7 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
   const record = await HealthRecord.findOne({ record_id: recordId });
   if (!record) throw new AppError('Health record not found.', 404);
   if (record.archived) throw new AppError('Archived health record cannot be updated.', 409);
+  const before = record.toObject({ versionKey: false });
 
   if (clientVersion !== null && record.__v !== clientVersion) {
     const err = new AppError('Conflict: resource has been modified.', 409);
@@ -399,6 +422,19 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
     record_id: record.record_id,
   });
 
+  const auditShape = getAuditRecordShape(record);
+  const diff = auditService.diffValues(before, record);
+  await auditService.logAuditEvent({
+    actor,
+    action: auditShape.updateAction,
+    entity_type: auditShape.entityType,
+    entity_id: record.record_id,
+    entity_name: record.patient_name,
+    description: `${record.record_type} record updated.`,
+    old_value: diff.old_value,
+    new_value: diff.new_value,
+  });
+
   return record;
 };
 
@@ -410,18 +446,13 @@ exports.__private__ = {
 };
 
 exports.deleteHealthRecord = async (recordId, actor) => {
-  const record = await HealthRecord.findOneAndUpdate(
-    { record_id: recordId },
-    {
-      $set: {
-        archived: true,
-        archived_at: new Date(),
-        updated_by: actor?.id,
-      },
-    },
-    { returnDocument: 'after' }
-  );
+  const record = await HealthRecord.findOne({ record_id: recordId });
   if (!record) throw new AppError('Health record not found.', 404);
+  const before = record.toObject({ versionKey: false });
+  record.archived = true;
+  record.archived_at = new Date();
+  record.updated_by = actor?.id;
+  await record.save();
 
   logger.info({
     event: 'HEALTH_RECORD_ARCHIVED',
@@ -429,6 +460,19 @@ exports.deleteHealthRecord = async (recordId, actor) => {
     actor_role: actor?.role,
     ip: actor?.ip,
     record_id: record.record_id,
+  });
+
+  const auditShape = getAuditRecordShape(record);
+  const diff = auditService.diffValues(before, record);
+  await auditService.logAuditEvent({
+    actor,
+    action: auditShape.deleteAction,
+    entity_type: auditShape.entityType,
+    entity_id: record.record_id,
+    entity_name: record.patient_name,
+    description: `${record.record_type} record archived.`,
+    old_value: diff.old_value,
+    new_value: diff.new_value,
   });
 
   return record;

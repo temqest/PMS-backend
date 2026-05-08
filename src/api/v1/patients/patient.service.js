@@ -4,6 +4,7 @@ const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
 const { ROLES } = require('../../../config/constants');
 const { anonymizePatient, anonymizePatients } = require('../../../utils/anonymize');
+const auditService = require('../audit-logs/auditLog.service');
 
 const DEFAULT_LIFESTYLE = Object.freeze({
   smoking: false,
@@ -47,6 +48,15 @@ exports.registerPatient = async (data, actor) => {
     try {
       patient = await Patient.create(toCreate);
       logger.info({ event: 'PATIENT_CREATED', actor_id: actor?.id, actor_role: actor?.role, ip: actor?.ip, patient_id });
+      await auditService.logAuditEvent({
+        actor,
+        action: 'CREATE_PATIENT',
+        entity_type: 'patient',
+        entity_id: patient.patient_id,
+        entity_name: `${patient.first_name} ${patient.last_name}`.trim(),
+        description: 'Patient created.',
+        new_value: patient,
+      });
       return patient;
     } catch (err) {
       // E11000 duplicate key error from Mongo
@@ -161,6 +171,7 @@ exports.updatePatient = async (patientId, updates, actor) => {
 
   const patientDoc = await Patient.findOne({ patient_id: patientId });
   if (!patientDoc) throw new AppError('Patient not found.', 404);
+  const before = patientDoc.toObject({ versionKey: false });
 
   if (clientVersion !== null && patientDoc.__v !== clientVersion) {
     const err = new AppError('Conflict: resource has been modified.', 409);
@@ -182,22 +193,46 @@ exports.updatePatient = async (patientId, updates, actor) => {
   await patientDoc.save();
 
   logger.info({ event: 'PATIENT_UPDATED', actor_id: actor?.id, actor_role: actor?.role, ip: actor?.ip, patient_id: patientId });
+  const diff = auditService.diffValues(before, patientDoc);
+  await auditService.logAuditEvent({
+    actor,
+    action: 'UPDATE_PATIENT',
+    entity_type: 'patient',
+    entity_id: patientDoc.patient_id,
+    entity_name: `${patientDoc.first_name} ${patientDoc.last_name}`.trim(),
+    description: 'Patient updated.',
+    old_value: diff.old_value,
+    new_value: diff.new_value,
+  });
   return patientDoc;
 };
 
 exports.softDeletePatient = async (patientId, actor) => {
-  const patient = await Patient.findOneAndUpdate(
-    { patient_id: patientId },
-    { $set: { status: 'archived', updated_by: actor?.id } },
-    { returnDocument: 'after' }
-  );
-  if (!patient) throw new AppError('Patient not found.', 404);
+  const before = await Patient.findOne({ patient_id: patientId });
+  if (!before) throw new AppError('Patient not found.', 404);
+  const beforeValue = before.toObject({ versionKey: false });
+  before.status = 'archived';
+  before.updated_by = actor?.id;
+  await before.save();
+  const patient = before;
 
   logger.info({ event: 'PATIENT_ARCHIVED', actor_id: actor?.id, actor_role: actor?.role, ip: actor?.ip, patient_id: patientId });
+  await auditService.logAuditEvent({
+    actor,
+    action: 'DELETE_PATIENT',
+    entity_type: 'patient',
+    entity_id: patient.patient_id,
+    entity_name: `${patient.first_name} ${patient.last_name}`.trim(),
+    description: 'Patient archived.',
+    old_value: auditService.diffValues(beforeValue, patient).old_value,
+    new_value: auditService.diffValues(beforeValue, patient).new_value,
+  });
   return patient;
 };
 
 exports.linkAppointment = async (patientId, appointmentRef, actor) => {
+  const before = await Patient.findOne({ patient_id: patientId });
+  if (!before) throw new AppError('Patient not found.', 404);
   const patient = await Patient.findOneAndUpdate(
     { patient_id: patientId },
     { $push: { appointment_refs: appointmentRef }, $set: { updated_by: actor?.id } },
@@ -205,10 +240,23 @@ exports.linkAppointment = async (patientId, appointmentRef, actor) => {
   );
   if (!patient) throw new AppError('Patient not found.', 404);
   logger.info({ event: 'APPOINTMENT_LINKED', actor_id: actor?.id, actor_role: actor?.role, ip: actor?.ip, patient_id: patientId, appointmentRef });
+  const diff = auditService.diffValues(before, patient);
+  await auditService.logAuditEvent({
+    actor,
+    action: 'LINK_PATIENT_APPOINTMENT',
+    entity_type: 'patient',
+    entity_id: patient.patient_id,
+    entity_name: `${patient.first_name} ${patient.last_name}`.trim(),
+    description: 'Appointment linked to patient.',
+    old_value: diff.old_value,
+    new_value: diff.new_value,
+  });
   return patient;
 };
 
 exports.updateMedicalHistory = async (patientId, medicalHistoryRef, actor) => {
+  const before = await Patient.findOne({ patient_id: patientId });
+  if (!before) throw new AppError('Patient not found.', 404);
   const patient = await Patient.findOneAndUpdate(
     { patient_id: patientId },
     { $set: { medical_history_ref: medicalHistoryRef, updated_by: actor?.id } },
@@ -216,5 +264,16 @@ exports.updateMedicalHistory = async (patientId, medicalHistoryRef, actor) => {
   );
   if (!patient) throw new AppError('Patient not found.', 404);
   logger.info({ event: 'MEDICAL_HISTORY_UPDATED', actor_id: actor?.id, actor_role: actor?.role, ip: actor?.ip, patient_id: patientId });
+  const diff = auditService.diffValues(before, patient);
+  await auditService.logAuditEvent({
+    actor,
+    action: 'UPDATE_PATIENT_MEDICAL_HISTORY',
+    entity_type: 'patient',
+    entity_id: patient.patient_id,
+    entity_name: `${patient.first_name} ${patient.last_name}`.trim(),
+    description: 'Patient medical history reference updated.',
+    old_value: diff.old_value,
+    new_value: diff.new_value,
+  });
   return patient;
 };

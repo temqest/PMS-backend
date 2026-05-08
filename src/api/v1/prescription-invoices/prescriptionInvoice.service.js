@@ -2,6 +2,7 @@ const PrescriptionInvoice = require('./prescriptionInvoice.model');
 const Patient = require('../patients/patient.model');
 const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
+const auditService = require('../audit-logs/auditLog.service');
 
 const makeInvoiceId = () =>
   `INV-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -55,6 +56,7 @@ exports.getPrescriptionInvoiceById = async (invoiceId, actor = {}) => {
 exports.updatePrescriptionInvoiceStatus = async (invoiceId, updates, actor) => {
   const invoice = await PrescriptionInvoice.findOne({ invoice_id: invoiceId });
   if (!invoice) throw new AppError('Prescription invoice not found.', 404);
+  const before = invoice.toObject({ versionKey: false });
 
   const nextStatus = typeof updates.status === 'string' ? updates.status : invoice.status;
   let nextIsReleased =
@@ -85,6 +87,18 @@ exports.updatePrescriptionInvoiceStatus = async (invoiceId, updates, actor) => {
     invoice_id: invoice.invoice_id,
     status: invoice.status,
     is_released: invoice.is_released,
+  });
+
+  const diff = auditService.diffValues(before, invoice);
+  await auditService.logAuditEvent({
+    actor,
+    action: 'UPDATE_PRESCRIPTION_INVOICE_STATUS',
+    entity_type: 'prescription_invoice',
+    entity_id: invoice.invoice_id,
+    entity_name: invoice.patient_name,
+    description: 'Prescription invoice status updated.',
+    old_value: diff.old_value,
+    new_value: diff.new_value,
   });
 
   return invoice;
@@ -143,6 +157,16 @@ exports.createPrescriptionInvoice = async (data, actor) => {
     patient_id: invoice.patient_id,
     health_record_id: invoice.health_record_id,
     total_amount: invoice.total_amount,
+  });
+
+  await auditService.logAuditEvent({
+    actor,
+    action: 'CREATE_PRESCRIPTION_INVOICE',
+    entity_type: 'prescription_invoice',
+    entity_id: invoice.invoice_id,
+    entity_name: invoice.patient_name,
+    description: 'Prescription invoice created.',
+    new_value: invoice,
   });
 
   return invoice;

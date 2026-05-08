@@ -13,6 +13,7 @@
     "seed:ml-training": "node scripts/ml-training/seedAndTrainIsolatedDb.js",
     "seed:validate": "node scripts/validateSeedRelationships.js",
     "audit:relationships": "node scripts/auditRelationships.js",
+    "audit:import-log": "node scripts/importAuditLog.js",
     "fix:relationships": "node scripts/fixRelationships.js",
     "audit:patient-record-coverage": "node scripts/auditPatientRecordCoverage.js"
   },

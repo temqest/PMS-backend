@@ -2,6 +2,7 @@ const ApiKey = require('./apiKey.model');
 const AppError = require('../../../utils/AppError');
 const asyncHandler = require('../../../utils/asyncHandler');
 const apiResponse = require('../../../utils/apiResponse');
+const auditService = require('../audit-logs/auditLog.service');
 
 /**
  * Create a new API key
@@ -22,6 +23,23 @@ exports.createApiKey = asyncHandler(async (req, res, next) => {
     description: description || '',
     permissions: permissions || ['read:invoices'],
     created_by: req.user.sub,
+  });
+
+  await auditService.logAuditEvent({
+    actor: auditService.buildActorFromRequest(req),
+    action: 'CREATE_API_KEY',
+    entity_type: 'api_key',
+    entity_id: String(apiKeyDoc._id),
+    entity_name: apiKeyDoc.name,
+    description: 'API key created.',
+    new_value: {
+      id: apiKeyDoc._id,
+      name: apiKeyDoc.name,
+      prefix: apiKeyDoc.prefix,
+      description: apiKeyDoc.description,
+      permissions: apiKeyDoc.permissions,
+      status: apiKeyDoc.status,
+    },
   });
 
   // Return the full key only once (user must save it securely)
@@ -85,6 +103,17 @@ exports.revokeApiKey = asyncHandler(async (req, res, next) => {
   apiKey.revoked_by = req.user.sub;
   await apiKey.save();
 
+  await auditService.logAuditEvent({
+    actor: auditService.buildActorFromRequest(req),
+    action: 'REVOKE_API_KEY',
+    entity_type: 'api_key',
+    entity_id: String(apiKey._id),
+    entity_name: apiKey.name,
+    description: 'API key revoked.',
+    old_value: { status: 'active' },
+    new_value: { status: apiKey.status, revoked_at: apiKey.revoked_at, revoked_by: apiKey.revoked_by },
+  });
+
   apiResponse.success(res, 200, {
     id: apiKey._id,
     status: apiKey.status,
@@ -97,7 +126,7 @@ exports.revokeApiKey = asyncHandler(async (req, res, next) => {
  * DELETE /api/v1/api-keys/:id
  */
 exports.deleteApiKey = asyncHandler(async (req, res, next) => {
-  const apiKey = await ApiKey.findByIdAndDelete(req.params.id);
+  const apiKey = await ApiKey.findById(req.params.id);
 
   if (!apiKey) {
     return next(new AppError('API key not found', 404));
@@ -107,6 +136,25 @@ exports.deleteApiKey = asyncHandler(async (req, res, next) => {
   if (apiKey.created_by !== req.user.sub && req.user.role !== 'system_admin') {
     return next(new AppError('Not authorized to delete this API key', 403));
   }
+
+  await ApiKey.deleteOne({ _id: apiKey._id });
+
+  await auditService.logAuditEvent({
+    actor: auditService.buildActorFromRequest(req),
+    action: 'DELETE_API_KEY',
+    entity_type: 'api_key',
+    entity_id: String(apiKey._id),
+    entity_name: apiKey.name,
+    description: 'API key deleted.',
+    old_value: {
+      id: apiKey._id,
+      name: apiKey.name,
+      prefix: apiKey.prefix,
+      description: apiKey.description,
+      permissions: apiKey.permissions,
+      status: apiKey.status,
+    },
+  });
 
   apiResponse.success(res, 200, {}, { message: 'API key deleted successfully' });
 });
@@ -128,6 +176,15 @@ exports.rotateApiKey = asyncHandler(async (req, res, next) => {
   if (apiKeyDoc.created_by !== req.user.sub && req.user.role !== 'system_admin') {
     return next(new AppError('Not authorized to rotate this API key', 403));
   }
+  const before = {
+    name: apiKeyDoc.name,
+    prefix: apiKeyDoc.prefix,
+    description: apiKeyDoc.description,
+    permissions: apiKeyDoc.permissions,
+    status: apiKeyDoc.status,
+    revoked_at: apiKeyDoc.revoked_at,
+    revoked_by: apiKeyDoc.revoked_by,
+  };
 
   // Generate a new unique key (retry on rare hash collision)
   let newApiKey = '';
@@ -161,6 +218,26 @@ exports.rotateApiKey = asyncHandler(async (req, res, next) => {
   }
 
   await apiKeyDoc.save();
+
+  const diff = auditService.diffValues(before, {
+    name: apiKeyDoc.name,
+    prefix: apiKeyDoc.prefix,
+    description: apiKeyDoc.description,
+    permissions: apiKeyDoc.permissions,
+    status: apiKeyDoc.status,
+    revoked_at: apiKeyDoc.revoked_at,
+    revoked_by: apiKeyDoc.revoked_by,
+  });
+  await auditService.logAuditEvent({
+    actor: auditService.buildActorFromRequest(req),
+    action: 'ROTATE_API_KEY',
+    entity_type: 'api_key',
+    entity_id: String(apiKeyDoc._id),
+    entity_name: apiKeyDoc.name,
+    description: 'API key rotated.',
+    old_value: diff.old_value,
+    new_value: diff.new_value,
+  });
 
   apiResponse.success(
     res,
@@ -196,6 +273,11 @@ exports.updateApiKey = asyncHandler(async (req, res, next) => {
   }
 
   const { name, description, permissions } = req.body || {};
+  const before = {
+    name: apiKeyDoc.name,
+    description: apiKeyDoc.description,
+    permissions: apiKeyDoc.permissions,
+  };
 
   if (typeof name !== 'undefined') apiKeyDoc.name = name;
   if (typeof description !== 'undefined') apiKeyDoc.description = description;
@@ -205,6 +287,22 @@ exports.updateApiKey = asyncHandler(async (req, res, next) => {
   }
 
   await apiKeyDoc.save();
+
+  const diff = auditService.diffValues(before, {
+    name: apiKeyDoc.name,
+    description: apiKeyDoc.description,
+    permissions: apiKeyDoc.permissions,
+  });
+  await auditService.logAuditEvent({
+    actor: auditService.buildActorFromRequest(req),
+    action: 'UPDATE_API_KEY',
+    entity_type: 'api_key',
+    entity_id: String(apiKeyDoc._id),
+    entity_name: apiKeyDoc.name,
+    description: 'API key metadata updated.',
+    old_value: diff.old_value,
+    new_value: diff.new_value,
+  });
 
   apiResponse.success(res, 200, apiKeyDoc, { message: 'API key updated successfully' });
 });

@@ -2,6 +2,7 @@ const Appointment = require('./appointment.model');
 const Patient = require('../patients/patient.model');
 const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
+const auditService = require('../audit-logs/auditLog.service');
 
 const buildScheduledAt = (date, time) => {
   if (!date || !time) return null;
@@ -136,6 +137,16 @@ exports.createAppointment = async (data, actor) => {
     patient_id: appointment.patient_id,
   });
 
+  await auditService.logAuditEvent({
+    actor,
+    action: 'CREATE_APPOINTMENT',
+    entity_type: 'appointment',
+    entity_id: appointment.appointment_id,
+    entity_name: appointment.patient_name,
+    description: 'Appointment created.',
+    new_value: appointment,
+  });
+
   return appointment;
 };
 
@@ -146,6 +157,7 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
   const appointment = await Appointment.findOne({ appointment_id: appointmentId });
   if (!appointment) throw new AppError('Appointment not found.', 404);
   if (appointment.status === 'Cancelled') throw new AppError('Cancelled appointment cannot be updated.', 409);
+  const before = appointment.toObject({ versionKey: false });
 
   if (actor?.role === 'patient') {
     if (!actor.patient_id || appointment.patient_id !== actor.patient_id) {
@@ -224,6 +236,17 @@ exports.updateAppointment = async (appointmentId, updates, actor) => {
     ip: actor?.ip,
     appointment_id: appointment.appointment_id,
   });
+  const diff = auditService.diffValues(before, appointment);
+  await auditService.logAuditEvent({
+    actor,
+    action: 'UPDATE_APPOINTMENT',
+    entity_type: 'appointment',
+    entity_id: appointment.appointment_id,
+    entity_name: appointment.patient_name,
+    description: 'Appointment updated.',
+    old_value: diff.old_value,
+    new_value: diff.new_value,
+  });
   return appointment;
 };
 
@@ -234,6 +257,7 @@ exports.cancelAppointment = async (appointmentId, reason, actor) => {
     if (!actor.patient_id || appointment.patient_id !== actor.patient_id) {
       throw new AppError('Forbidden: cannot modify another patient appointment.', 403);
     }
+    const before = appointment.toObject({ versionKey: false });
 
     appointment.status = 'Pending';
     appointment.cancel_reason = reason || 'Cancellation requested by patient';
@@ -248,22 +272,29 @@ exports.cancelAppointment = async (appointmentId, reason, actor) => {
       appointment_id: appointment.appointment_id,
     });
 
+    const diff = auditService.diffValues(before, appointment);
+    await auditService.logAuditEvent({
+      actor,
+      action: 'CANCEL_APPOINTMENT',
+      entity_type: 'appointment',
+      entity_id: appointment.appointment_id,
+      entity_name: appointment.patient_name,
+      description: 'Patient requested appointment cancellation.',
+      old_value: diff.old_value,
+      new_value: diff.new_value,
+    });
+
     return appointment;
   }
 
-  const appointment = await Appointment.findOneAndUpdate(
-    { appointment_id: appointmentId },
-    {
-      $set: {
-        status: 'Cancelled',
-        cancel_reason: reason || '',
-        cancelled_at: new Date(),
-        updated_by: actor?.id,
-      },
-    },
-    { returnDocument: 'after' }
-  );
+  const appointment = await Appointment.findOne({ appointment_id: appointmentId });
   if (!appointment) throw new AppError('Appointment not found.', 404);
+  const before = appointment.toObject({ versionKey: false });
+  appointment.status = 'Cancelled';
+  appointment.cancel_reason = reason || '';
+  appointment.cancelled_at = new Date();
+  appointment.updated_by = actor?.id;
+  await appointment.save();
 
   logger.info({
     event: 'APPOINTMENT_CANCELLED',
@@ -271,6 +302,17 @@ exports.cancelAppointment = async (appointmentId, reason, actor) => {
     actor_role: actor?.role,
     ip: actor?.ip,
     appointment_id: appointment.appointment_id,
+  });
+  const diff = auditService.diffValues(before, appointment);
+  await auditService.logAuditEvent({
+    actor,
+    action: 'CANCEL_APPOINTMENT',
+    entity_type: 'appointment',
+    entity_id: appointment.appointment_id,
+    entity_name: appointment.patient_name,
+    description: 'Appointment cancelled.',
+    old_value: diff.old_value,
+    new_value: diff.new_value,
   });
   return appointment;
 };

@@ -18,6 +18,7 @@ const prescriptionInvoiceRoutes = require('./api/v1/prescription-invoices/prescr
 const apiKeyRoutes = require('./api/v1/api-keys/apiKey.routes');
 const externalRoutes = require('./api/v1/external/external.routes');
 const predictiveCareRoutes = require('./api/v1/predictive-care/routes/predictiveCare.routes');
+const auditLogRoutes = require('./api/v1/audit-logs/auditLog.routes');
 
 const app = express();
 
@@ -119,6 +120,7 @@ app.use('/api/v1/prescription-invoices', prescriptionInvoiceRoutes);
 app.use('/api/v1/api-keys', apiKeyRoutes); // Manage API keys
 app.use('/api/v1/external', externalRoutes); // External API key authenticated routes
 app.use('/api/v1/predictive-care', predictiveCareRoutes);
+app.use('/api/v1/audit-logs', auditLogRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ status: 'fail', message: `Route ${req.originalUrl} not found` });

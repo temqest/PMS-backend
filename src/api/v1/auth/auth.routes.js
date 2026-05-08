@@ -5,6 +5,7 @@ const { allow } = require('../../../middleware/rbac.middleware');
 const { protect } = require('../../../middleware/auth.middleware');
 
 router.post('/login', ctrl.login);
+router.post('/logout', protect, ctrl.logout);
 router.post('/register', ctrl.register);
 router.get('/me', protect, ctrl.getMe);
 
