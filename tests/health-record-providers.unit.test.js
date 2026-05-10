@@ -66,6 +66,9 @@ describe('health record provider directory', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           'X-Subsystem-Key': 'staff-subsystem-secret',
+          'x-api-key': 'staff-subsystem-secret',
+          'X-API-Key': 'staff-subsystem-secret',
+          Authorization: 'Bearer staff-subsystem-secret',
         }),
       })
     );
@@ -99,5 +102,37 @@ describe('health record provider directory', () => {
       expect.objectContaining({ id: 'staff-77', name: 'Dr. Ana Reyes' })
     );
     expect(result.warning).toMatch(/fallback/i);
+  });
+
+  test('accepts camelCase pharmacist payloads from the staff subsystem', async () => {
+    axios.get.mockResolvedValue({
+      status: 200,
+      data: {
+        data: [
+          {
+            staff_id: 'fdfbf312-c9f0-4127-ab70-e174263dd0e4',
+            firstName: 'Juan',
+            lastName: 'Dela Cruz',
+            role: 'PHARMACIST',
+            email: 'jdelacruz@hospital.com',
+            phone: null,
+            department: null,
+            availability: null,
+          },
+        ],
+      },
+    });
+
+    const result = await healthRecordService.getHealthRecordProviders({});
+
+    expect(result.providers).toEqual([
+      expect.objectContaining({
+        id: 'fdfbf312-c9f0-4127-ab70-e174263dd0e4',
+        name: 'Juan Dela Cruz',
+        full_name: 'Juan Dela Cruz',
+        role: 'PHARMACIST',
+      }),
+    ]);
+    expect(result.warning).toBe('');
   });
 });

@@ -140,7 +140,9 @@ const isRelevantMedicalRole = (...values) =>
         value.includes('surgeon') ||
         value.includes('clinician') ||
         value.includes('medical') ||
-        value.includes('nurse')
+        value.includes('nurse') ||
+        value.includes('pharmacist') ||
+        value.includes('pharmacy')
     );
 
 const formatProviderDisplayName = ({ fullName = '', title = '', role = '', position = '' } = {}) => {
@@ -280,6 +282,9 @@ const fetchStaffProvidersFromSubsystem = async () => {
       headers: {
         Accept: 'application/json',
         'X-Subsystem-Key': subsystemKey,
+        'x-api-key': subsystemKey,
+        'X-API-Key': subsystemKey,
+        Authorization: `Bearer ${subsystemKey}`,
       },
       validateStatus: () => true,
     });
