@@ -35,6 +35,11 @@ exports.getPrescriptionMedicines = asyncHandler(async (req, res) => {
   apiResponse.success(res, 200, { data: medicines });
 });
 
+exports.getProviders = asyncHandler(async (req, res) => {
+  const providerDirectory = await service.getHealthRecordProviders(req.user || {});
+  apiResponse.success(res, 200, providerDirectory);
+});
+
 exports.createHealthRecord = asyncHandler(async (req, res) => {
   const actor = auditService.buildActorFromRequest(req);
   const record = await service.createHealthRecord(req.body, actor);

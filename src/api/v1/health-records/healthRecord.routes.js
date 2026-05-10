@@ -16,6 +16,9 @@ router.use(protect);
 router.route('/prescription-medicines')
   .get(allow('view', 'view:limited', 'view:own'), ctrl.getPrescriptionMedicines);
 
+router.route('/providers')
+  .get(allow('view', 'view:limited', 'view:own'), ctrl.getProviders);
+
 router.route('/')
   .get(allow('view', 'view:limited', 'view:own', 'view:anonymized'), ctrl.getHealthRecords)
   .post(allow('update:medical', 'update:emr_ref'), validate(createHealthRecordSchema), ctrl.createHealthRecord);

@@ -12,6 +12,7 @@ const healthRecordSchema = new mongoose.Schema(
     },
     record_date: { type: Date, required: true },
     provider: { type: String, required: true, trim: true },
+    provider_id: { type: String, trim: true, default: '' },
     save_state: { type: String, enum: ['draft', 'final'], default: 'final' },
     summary: { type: String, trim: true, default: '' },
     condition_category: {

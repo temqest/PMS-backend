@@ -1,4 +1,5 @@
 const HealthRecord = require('./healthRecord.model');
+const axios = require('axios');
 const Patient = require('../patients/patient.model');
 const Appointment = require('../appointments/appointment.model');
 const PrescriptionInvoice = require('../prescription-invoices/prescriptionInvoice.model');
@@ -11,6 +12,8 @@ const auditService = require('../audit-logs/auditLog.service');
 
 const INVENTORY_CACHE_TTL = 60 * 1000;
 let prescriptionInventoryCache = { timestamp: 0, items: [] };
+const STAFF_PROVIDER_CACHE_TTL = 60 * 1000;
+let staffProviderCache = { timestamp: 0, providers: [], warning: '' };
 
 const getPrescriptionInventoryAuth = () => {
   const apiKey = String(process.env.PRESCRIPTION_API_KEY || '').trim();
@@ -110,6 +113,237 @@ const isInStock = (status = '') => status.trim().toUpperCase() === 'IN STOCK';
 
 const getCanonicalPatientName = (patient) =>
   [patient?.first_name, patient?.last_name].filter(Boolean).join(' ').trim();
+
+const normalizeWhitespace = (value = '') => String(value || '').replace(/\s+/g, ' ').trim();
+
+const normalizeNameKey = (value = '') => normalizeWhitespace(value).toLowerCase();
+
+const isDoctorLikeRole = (...values) =>
+  values
+    .map((value) => String(value || '').toLowerCase())
+    .some(
+      (value) =>
+        value.includes('doctor') ||
+        value.includes('physician') ||
+        value.includes('md') ||
+        value.includes('surgeon')
+    );
+
+const isRelevantMedicalRole = (...values) =>
+  values
+    .map((value) => String(value || '').toLowerCase())
+    .some(
+      (value) =>
+        value.includes('doctor') ||
+        value.includes('physician') ||
+        value.includes('md') ||
+        value.includes('surgeon') ||
+        value.includes('clinician') ||
+        value.includes('medical') ||
+        value.includes('nurse')
+    );
+
+const formatProviderDisplayName = ({ fullName = '', title = '', role = '', position = '' } = {}) => {
+  const cleanName = normalizeWhitespace(fullName);
+  if (!cleanName) return '';
+
+  const cleanTitle = normalizeWhitespace(title);
+  if (cleanTitle) {
+    if (/^dr\.?$/i.test(cleanTitle)) return `Dr. ${cleanName}`;
+    if (/^dr\.?\s+/i.test(cleanTitle)) return `${cleanTitle.replace(/^dr\.?\s+/i, 'Dr. ')}${cleanName}`;
+    return `${cleanTitle} ${cleanName}`.trim();
+  }
+
+  if (isDoctorLikeRole(role, position)) {
+    if (/^dr\.?\s+/i.test(cleanName)) return cleanName.replace(/^dr\.?\s+/i, 'Dr. ');
+    return `Dr. ${cleanName}`;
+  }
+
+  return cleanName;
+};
+
+const unwrapArrayPayload = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+
+  const candidates = [
+    payload.data,
+    payload.staff,
+    payload.providers,
+    payload.results,
+    payload.items,
+    payload.users,
+    payload.members,
+    payload.employees,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+    if (candidate && typeof candidate === 'object') {
+      if (Array.isArray(candidate.data)) return candidate.data;
+      if (Array.isArray(candidate.staff)) return candidate.staff;
+      if (Array.isArray(candidate.providers)) return candidate.providers;
+      if (Array.isArray(candidate.results)) return candidate.results;
+      if (Array.isArray(candidate.items)) return candidate.items;
+      if (Array.isArray(candidate.users)) return candidate.users;
+      if (Array.isArray(candidate.members)) return candidate.members;
+      if (Array.isArray(candidate.employees)) return candidate.employees;
+    }
+  }
+
+  return [];
+};
+
+const normalizeStaffProvider = (item = {}) => {
+  const fullName = normalizeWhitespace(
+    item.full_name ||
+    item.fullName ||
+    item.name ||
+    [item.first_name, item.middle_name, item.last_name].filter(Boolean).join(' ') ||
+    [item.firstName, item.middleName, item.lastName].filter(Boolean).join(' ')
+  );
+
+  const role = normalizeWhitespace(
+    item.role ||
+    item.position ||
+    item.job_title ||
+    item.jobTitle ||
+    item.specialty ||
+    item.specialization ||
+    item.profession
+  );
+  const title = normalizeWhitespace(item.title || item.prefix || item.honorific);
+  const providerId = normalizeWhitespace(item.staff_id || item.staffId || item.user_id || item.userId || item.id || item._id);
+  const displayName = formatProviderDisplayName({
+    fullName,
+    title,
+    role,
+    position: item.position || item.job_title || item.jobTitle,
+  });
+
+  if (!providerId || !displayName) return null;
+  if (!isRelevantMedicalRole(role, title, item.department, item.position, item.job_title, item.jobTitle)) return null;
+
+  return {
+    id: providerId,
+    name: displayName,
+    full_name: fullName,
+    role,
+    title,
+  };
+};
+
+const dedupeProviders = (providers = []) => {
+  const byId = new Map();
+  providers.forEach((provider) => {
+    if (!provider?.id || !provider?.name) return;
+    if (!byId.has(provider.id)) {
+      byId.set(provider.id, provider);
+    }
+  });
+
+  return Array.from(byId.values()).sort((left, right) => left.name.localeCompare(right.name));
+};
+
+const getCurrentUserProviderCandidate = (user = {}) => {
+  const role = normalizeWhitespace(user.role);
+  const fullName = normalizeWhitespace(user.fullName || user.name || user.username);
+  if (!fullName) return null;
+  if (!isRelevantMedicalRole(role)) return null;
+
+  return {
+    id: normalizeWhitespace(user.user_id || user.sub || user.id),
+    name: formatProviderDisplayName({ fullName, role }),
+    full_name: fullName,
+    role,
+    title: '',
+  };
+};
+
+const fetchStaffProvidersFromSubsystem = async () => {
+  const baseUrl = String(process.env.STAFF_SUBSYSTEM_URL || '').trim();
+  const subsystemKey = String(process.env.STAFF_SUBSYSTEM_API_KEY || '').trim();
+
+  if (!baseUrl || !subsystemKey) {
+    throw new AppError('Staff subsystem provider lookup is not configured.', 500);
+  }
+
+  const now = Date.now();
+  if (now - staffProviderCache.timestamp < STAFF_PROVIDER_CACHE_TTL) {
+    return { providers: staffProviderCache.providers, warning: staffProviderCache.warning };
+  }
+
+  let response;
+  try {
+    response = await axios.get(baseUrl, {
+      timeout: Number(process.env.STAFF_SUBSYSTEM_TIMEOUT_MS || 10000),
+      headers: {
+        Accept: 'application/json',
+        'X-Subsystem-Key': subsystemKey,
+      },
+      validateStatus: () => true,
+    });
+  } catch (err) {
+    if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
+      throw new AppError('Staff subsystem provider lookup timed out.', 504);
+    }
+    throw new AppError('Staff subsystem provider lookup is unavailable.', 503);
+  }
+
+  if (response.status < 200 || response.status >= 300) {
+    logger.error({
+      event: 'STAFF_PROVIDER_LOOKUP_FAILED',
+      url: baseUrl,
+      status: response.status,
+      responseBody:
+        typeof response.data === 'string'
+          ? response.data.slice(0, 500)
+          : JSON.stringify(response.data || {}).slice(0, 500),
+    });
+    throw new AppError('Failed to load providers from the staff subsystem.', 502);
+  }
+
+  const providers = dedupeProviders(unwrapArrayPayload(response.data).map(normalizeStaffProvider).filter(Boolean));
+  staffProviderCache = { timestamp: now, providers, warning: providers.length ? '' : 'No eligible providers were returned by the staff subsystem.' };
+  return { providers, warning: staffProviderCache.warning };
+};
+
+exports.getHealthRecordProviders = async (user = {}) => {
+  const currentProvider = getCurrentUserProviderCandidate(user);
+
+  try {
+    const { providers, warning } = await fetchStaffProvidersFromSubsystem();
+    const mergedProviders = dedupeProviders(currentProvider ? [...providers, currentProvider] : providers);
+    const matchedCurrentProvider =
+      currentProvider &&
+      mergedProviders.find(
+        (provider) =>
+          provider.id === currentProvider.id ||
+          normalizeNameKey(provider.full_name || provider.name) === normalizeNameKey(currentProvider.full_name || currentProvider.name)
+      );
+
+    return {
+      providers: mergedProviders,
+      current_provider: matchedCurrentProvider || currentProvider || null,
+      warning: warning || '',
+    };
+  } catch (error) {
+    logger.warn({
+      event: 'STAFF_PROVIDER_LOOKUP_FALLBACK',
+      message: error.message,
+      user_id: user?.user_id || user?.sub || '',
+      role: user?.role || '',
+    });
+
+    return {
+      providers: currentProvider ? [currentProvider] : [],
+      current_provider: currentProvider || null,
+      warning: currentProvider
+        ? 'Unable to refresh staff providers from the external subsystem. Using the current logged-in provider as fallback.'
+        : 'Unable to load providers from the external staff subsystem.',
+    };
+  }
+};
 
 const getAuditRecordShape = (record) => {
   const isPrescription = record?.record_type === 'Prescription';
@@ -324,6 +558,7 @@ exports.createHealthRecord = async (data, actor) => {
     record_type: data.record_type,
     record_date: recordDate,
     provider: data.provider,
+    provider_id: String(data.provider_id || '').trim(),
     save_state: data.save_state || 'final',
     summary: data.summary || '',
     condition_category: categorizeCondition({
@@ -389,7 +624,7 @@ exports.updateHealthRecord = async (recordId, updates, actor) => {
   if (!nextPatientId) throw new AppError('patient_id is required.', 422);
   const nextPatient = await loadPatientOrThrow(nextPatientId);
 
-  const assignable = ['patient_id', 'record_type', 'provider', 'save_state', 'summary'];
+  const assignable = ['patient_id', 'record_type', 'provider', 'provider_id', 'save_state', 'summary'];
   assignable.forEach((key) => {
     if (typeof updates[key] !== 'undefined') record[key] = updates[key];
   });
@@ -443,6 +678,9 @@ exports.getPrescriptionMedicines = async () => fetchPrescriptionInventory();
 exports.__private__ = {
   fetchPrescriptionInventory,
   getPrescriptionInventoryAuth,
+  resetStaffProviderCache: () => {
+    staffProviderCache = { timestamp: 0, providers: [], warning: '' };
+  },
 };
 
 exports.deleteHealthRecord = async (recordId, actor) => {

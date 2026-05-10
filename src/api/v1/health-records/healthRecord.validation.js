@@ -143,6 +143,7 @@ const createHealthRecordSchema = Joi.object({
   record_type: Joi.string().valid(...recordTypes).required(),
   record_date: Joi.string().trim().required(),
   provider: Joi.string().trim().required(),
+  provider_id: Joi.string().trim().allow('').optional(),
   save_state: Joi.string().valid(...saveStates).default('final'),
   summary: Joi.string().trim().allow('').default(''),
   details: Joi.when('record_type', {
@@ -164,6 +165,7 @@ const updateHealthRecordSchema = Joi.object({
   record_type: Joi.string().valid(...recordTypes).optional(),
   record_date: Joi.string().trim().optional(),
   provider: Joi.string().trim().optional(),
+  provider_id: Joi.string().trim().allow('').optional(),
   save_state: Joi.string().valid(...saveStates).optional(),
   summary: Joi.string().trim().allow('').optional(),
   details: Joi.object().unknown(true).optional(),
