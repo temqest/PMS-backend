@@ -58,24 +58,12 @@ exports.updatePrescriptionInvoiceStatus = async (invoiceId, updates, actor) => {
   if (!invoice) throw new AppError('Prescription invoice not found.', 404);
   const before = invoice.toObject({ versionKey: false });
 
-  const nextStatus = typeof updates.status === 'string' ? updates.status : invoice.status;
-  let nextIsReleased =
-    typeof updates.is_released === 'boolean' ? updates.is_released : invoice.is_released;
-
-  if (updates.status === 'paid') {
-    nextIsReleased = true;
+  if (typeof updates.status === 'string') {
+    invoice.status = updates.status;
   }
-
-  if (nextIsReleased && nextStatus !== 'paid') {
-    throw new AppError('is_released can only be true when status is paid.', 422);
+  if (typeof updates.is_released === 'boolean') {
+    invoice.is_released = updates.is_released;
   }
-
-  if (nextStatus !== 'paid') {
-    nextIsReleased = false;
-  }
-
-  invoice.status = nextStatus;
-  invoice.is_released = nextIsReleased;
   invoice.updated_by = actor?.id;
   await invoice.save();
 

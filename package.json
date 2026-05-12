@@ -15,7 +15,8 @@
     "audit:relationships": "node scripts/auditRelationships.js",
     "audit:import-log": "node scripts/importAuditLog.js",
     "fix:relationships": "node scripts/fixRelationships.js",
-    "audit:patient-record-coverage": "node scripts/auditPatientRecordCoverage.js"
+    "audit:patient-record-coverage": "node scripts/auditPatientRecordCoverage.js",
+    "fix:prescription-invoices-default": "node scripts/resetPrescriptionInvoicesToDefault.js"
   },
   "dependencies": {
     "axios": "^1.16.0",

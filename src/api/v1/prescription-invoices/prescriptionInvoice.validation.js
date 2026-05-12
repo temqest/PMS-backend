@@ -27,15 +27,8 @@ const updatePrescriptionInvoiceStatusSchema = Joi.object({
   is_released: Joi.boolean().optional(),
 })
   .or('status', 'is_released')
-  .custom((value, helpers) => {
-    if (value.is_released === true && value.status && value.status !== 'paid') {
-      return helpers.error('any.invalid');
-    }
-    return value;
-  }, 'prescription invoice patch validation')
   .messages({
     'object.missing': 'At least one of status or is_released is required.',
-    'any.invalid': 'is_released can only be true when status is paid.',
   })
   .unknown(false);
 
